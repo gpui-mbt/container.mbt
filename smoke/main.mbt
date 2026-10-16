@@ -10,7 +10,7 @@ async fn main raise {
     container.rm() catch { _ => () }
   }
   // What: mutations after start must not change the reported host mappings.
-  image.with_mapped_port(18081, @container.ContainerPort::tcp(81))
+  ignore(image.with_mapped_port(18081, @container.ContainerPort::tcp(81)))
   let leaked = image.mappings()
   leaked.push(@container.PortMapping::new(18082, @container.ContainerPort::tcp(82)))
   let incorrectly_published = try {
