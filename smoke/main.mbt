@@ -1,6 +1,6 @@
 ///|
 /// Exercise the actual Docker Engine through the native CLI adapter.
-async fn main {
+async fn main raise {
   let image = @container.GenericImage::new("alpine", "3.20")
     .with_cmd(["tail", "-f", "/dev/null"])
   let container = image.start(@container.Docker)

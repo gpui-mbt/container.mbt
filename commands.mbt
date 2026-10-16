@@ -1,6 +1,6 @@
 ///|
 /// Platform-specific commands are kept behind a pure argument builder.
-pub enum Runtime {
+pub(all) enum Runtime {
   Docker
   AppleContainer
 }

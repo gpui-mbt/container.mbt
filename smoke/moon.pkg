@@ -1,5 +1,6 @@
 import {
-  "gpui-mbt/container" as @container,
+  "gpui-mbt/container",
+  "moonbitlang/async",
 }
 
 pkgtype(kind: "executable")
