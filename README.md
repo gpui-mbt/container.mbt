@@ -15,9 +15,9 @@ MoonBit-native port of [shiguredo/container-rs](https://github.com/shiguredo/con
 
 `GenericImage` provides `new`, `with_cmd`, `with_env_var`, `with_label`, `with_entrypoint`, `with_container_name`, `with_mapped_port`, `with_exposed_port`, `with_mount`, `with_wait_for`, and other options.
 
-`image.start(runtime)` (or `start_detected()`) returns a container. `container.exec(...)`, `logs()`, `stop()`, and `rm()` are supported by the CLI adapter, and fixed port mappings can be read with `get_host_port_ipv4`. **Call `rm()` explicitly**, ideally in a cleanup branch; unlike the Rust library, this version does not clean up in Drop.
+`image.start(runtime)` (or `start_detected()`) returns a container. `container.exec(...)`, `logs()`, `stop()`, and `rm()` are supported by the CLI adapter, and fixed port mappings can be read with `get_host_port_ipv4`. Published mappings are snapshotted when the CLI run starts; later image-builder mutations cannot change the container's reported ports. **Call `rm()` explicitly**, ideally in a cleanup branch; unlike the Rust library, this version does not clean up in Drop.
 
-Supported waits: nothing, delay, stdout/stderr/either log string. Healthcheck/exit waits fail before container creation rather than silently skipping. An exposed port with host port 0 is Docker-only until Apple ephemeral publishing and runtime inspection are verified.
+Supported waits: nothing, delay, stdout/stderr/either log string. A shared startup deadline uses the MoonBit async timer clock; the CLI run command, each readiness condition, polling sleep, and log subprocess receive only the remaining budget. Rollback cleanup runs separately after a startup error. Healthcheck/exit waits fail before container creation rather than silently skipping. An exposed port with host port 0 is Docker-only until Apple ephemeral publishing and runtime inspection are verified.
 
 See [Porting status and roadmap](docs/PORTING.md) for exact differences. No claim of functional parity is made.
 

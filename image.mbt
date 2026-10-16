@@ -255,12 +255,13 @@ pub fn GenericImage::with_readonly_rootfs(self : GenericImage, enabled : Bool) -
 
 ///|
 pub fn GenericImage::ready_conditions(self : GenericImage) -> Array[WaitFor] {
-  self.ready_conditions
+  self.ready_conditions.copy()
 }
 
 ///|
+/// Return a snapshot, so callers cannot silently change the builder's ports.
 pub fn GenericImage::mappings(self : GenericImage) -> Array[PortMapping] {
-  self.mappings
+  self.mappings.copy()
 }
 
 ///|

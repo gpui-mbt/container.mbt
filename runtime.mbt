@@ -56,11 +56,35 @@ pub fn Container::get_host_port_ipv4(
 }
 
 ///|
+/// Remaining milliseconds on the same clock used by MoonBit async timers.
+fn startup_remaining_ms(deadline : Int64) -> Int raise {
+  let remaining = deadline - @async.now()
+  guard remaining > 0L else { fail("startup timeout exceeded") }
+  // Why not truncate an Int64 before applying the Int-sized command timeout.
+  if remaining > 2147483647L {
+    2147483647
+  } else {
+    remaining.to_int()
+  }
+}
+
+///|
+/// Clamp a command or polling interval to the shared startup deadline.
+fn startup_command_timeout_ms(deadline : Int64, maximum : Int) -> Int raise {
+  let remaining = startup_remaining_ms(deadline)
+  if remaining < maximum { remaining } else { maximum }
+}
+
+///|
 /// Run a container via the selected native runtime CLI without a shell.
 pub async fn GenericImage::start(self : GenericImage, runtime : Runtime) -> Container {
+  let deadline = @async.now() + self.startup_timeout_ms.to_int64()
   let args = build_run_args(runtime, self)
+  // Why not retain shared mutable builder arrays across container creation.
+  let published_mappings = self.mappings.copy()
+  let conditions = self.ready_conditions.copy()
   let result = @shell.Cmd(runtime.executable(), args).output(
-    timeout_ms=self.startup_timeout_ms,
+    timeout_ms=startup_remaining_ms(deadline),
     max_output_bytes=1048576,
   )
   guard result.exit_code() == 0 else {
@@ -76,14 +100,14 @@ pub async fn GenericImage::start(self : GenericImage, runtime : Runtime) -> Cont
   let container : Container = {
     id,
     runtime,
-    mappings: self.mappings,
+    mappings: published_mappings,
     removed: false,
   }
-  // Why not retain containers if readiness fails or the task is cancelled.
+  // Why not leave a container running if readiness fails or gets cancelled.
   errdefer {
     container.rm() catch { _ => () }
   }
-  container.wait_ready(self.ready_conditions, self.startup_timeout_ms)
+  container.wait_ready_until(conditions, deadline)
   container
 }
 
@@ -115,11 +139,21 @@ pub async fn Container::exec(
 ///|
 /// Retrieve bounded stdout and stderr logs.
 pub async fn Container::logs(self : Container) -> ProcessOutput {
+  self.logs_with_timeout(15000)
+}
+
+///|
+/// Allow startup readiness to shorten a CLI log read to remaining time.
+async fn Container::logs_with_timeout(
+  self : Container,
+  timeout_ms : Int,
+) -> ProcessOutput {
   guard !self.removed else { fail("container already removed") }
+  guard timeout_ms > 0 else { fail("log timeout must be positive") }
   let result = @shell.Cmd(
     self.runtime.executable(),
     ["logs", self.id],
-  ).output(timeout_ms=15000, max_output_bytes=67108864)
+  ).output(timeout_ms=timeout_ms, max_output_bytes=67108864)
   guard result.exit_code() == 0 else {
     fail("container logs failed (exit \{result.exit_code()})")
   }
@@ -160,52 +194,72 @@ pub async fn Container::rm(self : Container) -> Unit {
 }
 
 ///|
-/// Wait for supported readiness conditions in declaration order.
+/// Start an independent readiness budget for callers outside start().
 pub async fn Container::wait_ready(
   self : Container,
   conditions : Array[WaitFor],
   timeout_ms : Int,
 ) -> Unit {
   guard timeout_ms > 0 else { fail("startup timeout must be positive") }
-  for ready in conditions {
-    match ready {
-      Nothing => ()
-      Millis(ms) =>
-        if ms < 0 {
-          fail("wait duration must not be negative")
-        } else {
-          @async.sleep(ms)
-        }
-      MessageOnStdout(message) => self.wait_for_log(message, "stdout", timeout_ms)
-      MessageOnStderr(message) => self.wait_for_log(message, "stderr", timeout_ms)
-      MessageOnEither(message) => self.wait_for_log(message, "both", timeout_ms)
-      Healthcheck | Exit => fail("readiness strategy is not implemented by the CLI adapters")
-    }
-  }
+  let deadline = @async.now() + timeout_ms.to_int64()
+  self.wait_ready_until(conditions, deadline)
 }
 
 ///|
-/// Polling is bounded and never starts an unbounded background reader.
-async fn Container::wait_for_log(
+/// Share the deadline created before CLI run across all readiness conditions.
+async fn Container::wait_ready_until(
+  self : Container,
+  conditions : Array[WaitFor],
+  deadline : Int64,
+) -> Unit {
+  for ready in conditions {
+    let remaining = startup_remaining_ms(deadline)
+    match ready {
+      Nothing => ()
+      Millis(ms) => {
+        guard ms >= 0 else { fail("wait duration must not be negative") }
+        if ms > remaining {
+          // Why not sleep past the total deadline when one condition is too long.
+          @async.sleep(remaining)
+          fail("startup timeout exceeded")
+        }
+        @async.sleep(ms)
+      }
+      MessageOnStdout(message) =>
+        self.wait_for_log_until(message, "stdout", deadline)
+      MessageOnStderr(message) =>
+        self.wait_for_log_until(message, "stderr", deadline)
+      MessageOnEither(message) =>
+        self.wait_for_log_until(message, "both", deadline)
+      Healthcheck | Exit =>
+        fail("readiness strategy is not implemented by the CLI adapters")
+    }
+  }
+  ignore(startup_remaining_ms(deadline))
+}
+
+///|
+/// Poll logs only while there is time left for this and earlier conditions.
+async fn Container::wait_for_log_until(
   self : Container,
   message : String,
   stream : String,
-  timeout_ms : Int,
+  deadline : Int64,
 ) -> Unit {
   guard message != "" else { return }
-  let interval_ms = 250
-  let attempts = (timeout_ms + interval_ms - 1) / interval_ms
-  for _i = 0; _i < attempts; _i = _i + 1 {
-    let logs = self.logs()
+  while true {
+    // Why not give each logs subprocess a fresh fifteen-second allowance.
+    let budget = startup_command_timeout_ms(deadline, 15000)
+    let logs = self.logs_with_timeout(budget)
     let hit = match stream {
       "stdout" => logs.stdout().contains(message)
       "stderr" => logs.stderr().contains(message)
       _ => logs.stdout().contains(message) || logs.stderr().contains(message)
     }
+    ignore(startup_remaining_ms(deadline))
     if hit {
       return
     }
-    @async.sleep(interval_ms)
+    @async.sleep(startup_command_timeout_ms(deadline, 250))
   }
-  fail("container readiness timed out waiting for \{stream} message")
 }
