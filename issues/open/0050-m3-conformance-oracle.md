@@ -32,6 +32,6 @@ port の完了を Rust ソースの存在で判断せず、実際の observable 
 ## 主な参照
 
 - `docs/PORTING.md` ([MoonBit 作業ブランチ](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md))
-- `docs/TESTCONTAINERS.md` ([MoonBit 作業ブランチ](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/TESTCONTAINERS.md))
+- `docs/TESTCONTAINERS.md` ([upstream](https://github.com/shiguredo/container-rs/blob/f68ba1ffed67c9c4e9abdb39212835d50d7afcf3/docs/TESTCONTAINERS.md))
 
 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。
