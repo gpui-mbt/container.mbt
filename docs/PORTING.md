@@ -1,6 +1,6 @@
 # Porting matrix — shiguredo/container-rs to container.mbt
 
-Upstream reference: \`shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7afcf3\` (develop, 2026-10-07).
+Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7afcf3` (develop, 2026-10-07).
 
 | Capability | Upstream Rust | Current MoonBit | Next action |
 |---|---|---|---|
@@ -15,12 +15,12 @@ Upstream reference: \`shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7
 | Copy in/out | Yes | Not implemented | Tar stream and path validation |
 | Graceful cleanup / keep | Drop / explicit rm / watchdog | Explicit rm only | Safe scoped lifecycle helpers and watchdog |
 | Networking / platform / permissions | Broad feature coverage | Small subset | Add separately with host-specific tests |
-| Mac/Ubuntu E2E | Extensive | Not executed | Native runners and host observability |
+| Mac/Ubuntu E2E | Extensive | Linux Docker lifecycle smoke in CI; macOS pending | Native runners and host observability |
 
 ## Architecture
 
 1. **MoonBit core:** configuration, validation, readiness models, argument construction and public container operations.
-2. **Temporary adapters:** native \`moonbitlang/async/shell\` process spawn with argv arrays. No shell string evaluation or Node.js.
+2. **Temporary adapters:** native `moonbitlang/async/shell` process spawn with argv arrays. No shell string evaluation or Node.js.
 3. **Future parity adapters:** direct Docker Engine API on Linux and Apple Container XPC on Apple Silicon macOS. Runtime adapters must not influence the public API.
 
 ## Compatibility and safety constraints
@@ -29,13 +29,13 @@ Upstream reference: \`shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7
 - Never execute user-provided shell snippets. Runtime arguments are an argv array, not a shell command.
 - Reject duplicate port mappings and invalid container IDs before network pull or container creation.
 - Use bounded captured output; log retrieval is not a streaming substitute for the original LogConsumer.
-- Explicit \`rm\` is mandatory for now. No automatic cleanup contract is implemented.
+- Explicit `rm` is mandatory for now. No automatic cleanup contract is implemented.
 - Current CLI mode cannot claim upstream's Docker Desktop-free XPC behavior or API-level error classification.
 - Keep upstream revision pinned for feature comparison, and preserve attribution and license.
 
 ## Acceptance milestones
 
-**M0 (this PR):** MoonBit native API, CLI command construction, lifecycle adapter, deterministic conformance tests. No real-runtime PASS claim.
+**M0 (this PR):** MoonBit native API, CLI command construction, lifecycle adapter, deterministic conformance tests and Linux Docker lifecycle smoke. The CLI adapter is still not equivalent to upstream's direct Docker Engine/XPC transport.
 
 **M1:** Linux Docker Engine API transport + image pull/start/exec/logs/stop/rm, rollback, port inspection, process-crash tests.
 

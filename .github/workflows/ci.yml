@@ -23,5 +23,10 @@ jobs:
         run: moon test --target native
       - name: Build native library
         run: moon build --target native
+      - name: Linux Docker lifecycle integration
+        run: |
+          docker info
+          docker pull alpine:3.20
+          moon run smoke --target native
       - name: Check Mooncakes package
         run: moon package --list
