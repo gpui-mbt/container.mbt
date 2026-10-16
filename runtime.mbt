@@ -79,15 +79,11 @@ pub async fn GenericImage::start(self : GenericImage, runtime : Runtime) -> Cont
     mappings: self.mappings,
     removed: false,
   }
-  try {
-    container.wait_ready(self.ready_conditions, self.startup_timeout_ms)
-  } catch {
-    error => {
-      // Why not leave a container running when readiness fails.
-      container.rm() catch { _ => () }
-      raise error
-    }
+  // Why not retain containers if readiness fails or the task is cancelled.
+  errdefer {
+    container.rm() catch { _ => () }
   }
+  container.wait_ready(self.ready_conditions, self.startup_timeout_ms)
   container
 }
 

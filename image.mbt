@@ -49,6 +49,18 @@ pub fn WaitFor::nothing() -> WaitFor {
 }
 
 ///|
+/// Explicitly request a healthcheck wait. CLI runtime adapters fail before launch.
+pub fn WaitFor::healthcheck() -> WaitFor {
+  Healthcheck
+}
+
+///|
+/// Explicitly request an exit wait. CLI runtime adapters fail before launch.
+pub fn WaitFor::when_exited() -> WaitFor {
+  Exit
+}
+
+///|
 pub fn WaitFor::millis(milliseconds : Int) -> WaitFor {
   Millis(milliseconds)
 }
@@ -83,9 +95,9 @@ pub struct GenericImage {
   mut container_name : String?
   mut env_vars : Array[(String, String)]
   mut labels : Array[(String, String)]
-  mut mappings : Array[PortMapping]
-  mut mounts : Array[Mount]
-  mut ready_conditions : Array[WaitFor]
+  mappings : Array[PortMapping]
+  mounts : Array[Mount]
+  ready_conditions : Array[WaitFor]
   mut startup_timeout_ms : Int
   mut working_dir : String?
   mut user : String?

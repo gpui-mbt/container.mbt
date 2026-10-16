@@ -100,7 +100,7 @@ pub fn build_run_args(runtime : Runtime, image : GenericImage) -> Array[String] 
     args.push(mapping.as_publish_argument())
   }
   for mount in image.mounts {
-    let (kind, source, destination, readonly) = match mount {
+    let (kind, source, destination, is_read_only) = match mount {
       Bind(src, dst, ro) => ("bind", src, dst, ro)
       Volume(src, dst, ro) => ("volume", src, dst, ro)
       Tmpfs(dst) => ("tmpfs", "", dst, false)
@@ -120,7 +120,7 @@ pub fn build_run_args(runtime : Runtime, image : GenericImage) -> Array[String] 
       }
       option = option + ",source=\{source}"
     }
-    if readonly {
+    if is_read_only {
       option = option + ",readonly"
     }
     args.push("--mount")
