@@ -39,6 +39,6 @@ Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7a
 
 **M1:** Linux Docker Engine API transport + image pull/start/exec/logs/stop/rm, rollback, port inspection, process-crash tests.
 
-**M2:** Apple Container XPC with Apple Silicon tests (macOS 26), logging and fd ownership, cleanup.
+**M2:** Apple Container XPC with Apple Silicon tests (macOS 26), logging and fd ownership, cleanup. The separate M0 CLI smoke acceptance is described in [APPLE_E2E.md](APPLE_E2E.md), and must not be mistaken for XPC compatibility.
 
 **M3:** Full documented parity matrix: copy, health/HTTP/exit waits, registry auth, volumes/networks, resource configuration, fault and timeout coverage. Merge only after CI green and approve-equivalent independent review.

@@ -52,5 +52,34 @@ async fn main raise {
   }
   container.stop()
   container.rm()
+  // What: a readiness timeout after successful run must remove the new container.
+  let cleanup_name = "container-mbt-timeout-\{@async.now()}"
+  let failing_image = @container.GenericImage::new("alpine", "3.20")
+    .with_container_name(cleanup_name)
+    .with_cmd(["tail", "-f", "/dev/null"])
+    .with_wait_for(@container.WaitFor::millis(10000))
+    .with_startup_timeout(2500)
+  let rejected = try {
+    let unexpected = failing_image.start(@container.Docker)
+    unexpected.rm()
+    false
+  } catch {
+    _ => true
+  }
+  guard rejected else { fail("startup deadline failed to reject slow readiness") }
+  let probe = @shell.Cmd("docker", ["inspect", cleanup_name]).output(
+    timeout_ms=15000,
+    max_output_bytes=1048576,
+  )
+  guard probe.exit_code() != 0 else {
+    // Why not leave an orphan behind when the regression assertion fails.
+    ignore(
+      @shell.Cmd("docker", ["rm", "--force", cleanup_name]).output(
+        timeout_ms=15000,
+        max_output_bytes=1048576,
+      ),
+    )
+    fail("readiness failure left a Docker container behind")
+  }
   println("Docker lifecycle E2E PASS")
 }

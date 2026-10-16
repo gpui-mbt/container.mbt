@@ -138,7 +138,7 @@ pub fn GenericImage::descriptor(self : GenericImage) -> String {
 
 ///|
 pub fn GenericImage::with_cmd(self : GenericImage, command : Array[String]) -> GenericImage {
-  self.command = command
+  self.command = command.copy()
   self
 }
 

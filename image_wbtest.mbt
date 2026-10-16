@@ -35,3 +35,13 @@ test "container names use upstream Apple validation" {
   assert_true(!valid_container_name("bad/name"))
   assert_true(!valid_container_name("a" + "b".repeat(63)))
 }
+
+///|
+/// What: later changes to the caller's command array cannot rewrite the image.
+test "command builder snapshots mutable caller arguments" {
+  let command = ["sh", "-c", "echo safe"]
+  let image = GenericImage::new("alpine", "3.20").with_cmd(command)
+  command.push("unexpected")
+  assert_eq(image.command.length(), 3)
+  assert_eq(image.command[2], "echo safe")
+}

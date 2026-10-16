@@ -17,7 +17,7 @@ MoonBit-native port of [shiguredo/container-rs](https://github.com/shiguredo/con
 
 `image.start(runtime)` (or `start_detected()`) returns a container. `container.exec(...)`, `logs()`, `stop()`, and `rm()` are supported by the CLI adapter, and fixed port mappings can be read with `get_host_port_ipv4`. Published mappings are snapshotted when the CLI run starts; later image-builder mutations cannot change the container's reported ports. **Call `rm()` explicitly**, ideally in a cleanup branch; unlike the Rust library, this version does not clean up in Drop.
 
-Supported waits: nothing, delay, stdout/stderr/either log string. A shared startup deadline uses the MoonBit async timer clock; the CLI run command, each readiness condition, polling sleep, and log subprocess receive only the remaining budget. Rollback cleanup runs separately after a startup error. Healthcheck/exit waits fail before container creation rather than silently skipping. An exposed port with host port 0 is Docker-only until Apple ephemeral publishing and runtime inspection are verified.
+Supported waits: nothing, delay, stdout/stderr/either log string. A shared startup deadline uses the MoonBit async timer clock; the CLI run command, each readiness condition, polling sleep, and log subprocess receive only the remaining budget. Rollback cleanup runs separately after readiness failure. **A CLI launch that times out before its container ID is known can still leave a runtime-owned container behind; this is an open startup-cleanup blocker.** Healthcheck/exit waits fail before container creation rather than silently skipping. An exposed port with host port 0 is Docker-only until Apple ephemeral publishing and runtime inspection are verified.
 
 See [Porting status and roadmap](docs/PORTING.md) for exact differences. No claim of functional parity is made.
 
@@ -30,7 +30,7 @@ moon test --target native
 moon build --target native
 ```
 
-The unit tests are deterministic argument/API conformance tests. The Linux GitHub Actions job additionally runs a Docker daemon-backed smoke exercise in `smoke/` using the real Alpine image. macOS Apple Silicon real-runtime E2E is pending. Do not merge without green CI and independent review.
+The unit tests are deterministic argument/API conformance tests. The Linux GitHub Actions job additionally runs a Docker daemon-backed smoke exercise in `smoke/` using the real Alpine image, including the readiness-failure cleanup path. macOS Apple Silicon real-runtime E2E is pending; see [Apple Container manual acceptance](docs/APPLE_E2E.md) and `smoke_apple/`. Do not merge without green CI, an independent approve-equivalent review and platform acceptance.
 
 ## Provenance and license
 
