@@ -1,32 +1,151 @@
 ///|
-/// Mount options shared by the two initial CLI adapters.
+/// Mount access mode (upstream `AccessMode`, 0044). `with_read_only`
+/// maps to `ReadOnly`; `ReadWrite` is the default.
+pub enum AccessMode {
+  ReadOnly
+  ReadWrite
+}
+
+///|
+/// tmpfs mount options (upstream `MountTmpfsOptions`, 0044). `mode` is
+/// the raw permission-bit integer (e.g. `0o1777`); CLI serialization
+/// renders it as octal, the Engine API carries it as a JSON number.
+pub struct TmpfsOptions {
+  size_bytes : Int64?
+  mode : Int32?
+}
+
+///|
+pub fn TmpfsOptions::new() -> TmpfsOptions {
+  { size_bytes: None, mode: None, }
+}
+
+///|
+/// Byte size, verbatim. Negative sizes raise (upstream panics).
+pub fn TmpfsOptions::with_size_bytes(
+  self : TmpfsOptions,
+  bytes : Int64,
+) -> TmpfsOptions raise {
+  guard bytes >= 0 else { fail("tmpfs size must not be negative") }
+  { size_bytes: Some(bytes), mode: self.mode, }
+}
+
+///|
+/// Size with optional base-1000 suffix (`k`/`m`/`g`, upstream
+/// `with_size`). Empty, signed, non-numeric and overflowing specs raise.
+pub fn TmpfsOptions::with_size(
+  self : TmpfsOptions,
+  spec : String,
+) -> TmpfsOptions raise {
+  let mult : Int64 = if spec.has_suffix("k") || spec.has_suffix("K") {
+    1000
+  } else if spec.has_suffix("m") || spec.has_suffix("M") {
+    1000000
+  } else if spec.has_suffix("g") || spec.has_suffix("G") {
+    1000000000
+  } else {
+    1
+  }
+  let digits : StringView = if mult == 1 {
+    spec[:]
+  } else {
+    spec[:spec.length() - 1]
+  }
+  guard digits.length() > 0 else { fail("invalid tmpfs size: \{spec}") }
+  // Int64::MAX_VALUE spelled out — importing moonbitlang/core/int64
+  // for one constant is not worth the dependency edge.
+  let max_int64 : Int64 = 9223372036854775807
+  let mut n : Int64 = 0
+  for c in digits {
+    guard c is ('0'..<='9') else { fail("invalid tmpfs size: \{spec}") }
+    let d = (c.to_int() - '0'.to_int()).to_int64()
+    guard n <= (max_int64 - d) / 10 else {
+      fail("tmpfs size overflow: \{spec}")
+    }
+    n = n * 10 + d
+  }
+  guard n <= max_int64 / mult else { fail("tmpfs size overflow: \{spec}") }
+  { size_bytes: Some(n * mult), mode: self.mode, }
+}
+
+///|
+/// Permission bits (e.g. `0o1777`). Negative modes raise.
+pub fn TmpfsOptions::with_mode(
+  self : TmpfsOptions,
+  mode : Int32,
+) -> TmpfsOptions raise {
+  guard mode >= 0 else { fail("tmpfs mode must not be negative") }
+  { size_bytes: self.size_bytes, mode: Some(mode), }
+}
+
+///|
+/// Mount options shared by the adapters (0044: access mode + tmpfs
+/// options added; `bind_mount`/`volume_mount`/`tmpfs_mount` keep their
+/// signatures).
 pub enum Mount {
-  Bind(String, String, Bool)
-  Volume(String, String, Bool)
-  Tmpfs(String)
+  Bind(String, String, AccessMode)
+  Volume(String, String, AccessMode)
+  Tmpfs(String, AccessMode, TmpfsOptions)
 }
 
 ///|
 pub fn Mount::bind_mount(source : String, destination : String) -> Mount {
-  Bind(source, destination, false)
+  Bind(source, destination, ReadWrite)
 }
 
 ///|
 pub fn Mount::volume_mount(source : String, destination : String) -> Mount {
-  Volume(source, destination, false)
+  Volume(source, destination, ReadWrite)
 }
 
 ///|
 pub fn Mount::tmpfs_mount(destination : String) -> Mount {
-  Tmpfs(destination)
+  Tmpfs(destination, ReadWrite, TmpfsOptions::new())
+}
+
+///|
+/// tmpfs mount carrying explicit options (0044).
+pub fn Mount::tmpfs_mount_options(
+  destination : String,
+  options : TmpfsOptions,
+) -> Mount {
+  Tmpfs(destination, ReadWrite, options)
 }
 
 ///|
 pub fn Mount::with_read_only(self : Mount) -> Mount {
   match self {
-    Bind(source, destination, _) => Bind(source, destination, true)
-    Volume(source, destination, _) => Volume(source, destination, true)
-    Tmpfs(destination) => Tmpfs(destination)
+    Bind(source, destination, _) => Bind(source, destination, ReadOnly)
+    Volume(source, destination, _) => Volume(source, destination, ReadOnly)
+    Tmpfs(destination, _, options) => Tmpfs(destination, ReadOnly, options)
+  }
+}
+
+///|
+/// tmpfs byte size. Silently ignored on non-tmpfs mounts, matching
+/// upstream where `MountTmpfsOptions` is dropped at reflection time.
+pub fn Mount::with_size_bytes(self : Mount, bytes : Int64) -> Mount raise {
+  match self {
+    Tmpfs(dst, mode, opts) => Tmpfs(dst, mode, opts.with_size_bytes(bytes))
+    _ => self
+  }
+}
+
+///|
+/// tmpfs size with `k`/`m`/`g` suffix. Silently ignored on non-tmpfs.
+pub fn Mount::with_size(self : Mount, spec : String) -> Mount raise {
+  match self {
+    Tmpfs(dst, mode, opts) => Tmpfs(dst, mode, opts.with_size(spec))
+    _ => self
+  }
+}
+
+///|
+/// tmpfs permission bits. Silently ignored on non-tmpfs.
+pub fn Mount::with_mode(self : Mount, mode : Int32) -> Mount raise {
+  match self {
+    Tmpfs(dst, m, opts) => Tmpfs(dst, m, opts.with_mode(mode))
+    _ => self
   }
 }
 

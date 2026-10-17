@@ -1,6 +1,6 @@
 # [P1 / M3] tmpfs size/mode・volume/read-only/bind の詳細互換
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -56,13 +56,21 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given tmpfs mount に 100000 バイトの size, when Docker 経路で構築する, then 引数またはリクエストに size 相当の値が反映される。
-- [ ] Given `with_size("100k")` / `"100m"` / `"100g"` / 単位なし, when parse する, then 100000 / 100000000 / 1000000000 / そのままになる。不正形式・負値・overflow は明示エラーになる。
-- [ ] Given read-only でない mount と read-only mount, when コンテナ内から書き込む, then read-only 側のみ拒否される（Docker 実機）。
-- [ ] Given 相対パスの bind source, when 構築する, then 副作用前に失敗する（既存動作の維持）。
-- [ ] Given Apple CLI で未対応の tmpfs size / mode, when 指定する, then 副作用前に明示エラーになり、コンテナが作成されない。
-- [ ] Given 既存の `Mount::tmpfs_mount` / `bind_mount` / `volume_mount` / `with_read_only` の利用箇所, when 再実行する, then 従来と同じ引数が組み立てられる。
-- [ ] 既存 smoke の mount なし経路に回帰がない。
+- [x] Given tmpfs mount に 100000 バイトの size, when Docker 経路で構築する, then 引数またはリクエストに size 相当の値が反映される。→ `--mount tmpfs-size=N`（CLI）と `Mounts[].TmpfsOptions.SizeBytes`（Engine API JSON）に反映。wbtest で確認。
+- [x] Given `with_size("100k")` / `"100m"` / `"100g"` / 単位なし, when parse する, then 100000 / 100000000 / 1000000000 / そのままになる。不正形式・負値・overflow は明示エラーになる。→ wbtest で確認（空・非数値・符号・オーバーフロー全て raise）。
+- [ ] Given read-only でない mount と read-only mount, when コンテナ内から書き込む, then read-only 側のみ拒否される（Docker 実機）。→ **未実行**。実機 daemon 非搭載。CI Docker ジョブ（0020 系）での受入を残す。
+- [x] Given 相対パスの bind source, when 構築する, then 副作用前に失敗する（既存動作の維持）。→ `validate_image_request` の絶対パス検証を維持し、さらに `ensure_bind_sources_exist`（`@fs.exists`）を両 start 経路の副作用前に追加。
+- [x] Given Apple CLI で未対応の tmpfs size / mode, when 指定する, then 副作用前に明示エラーになり、コンテナが作成されない。→ `Setting::TmpfsOptions` を追加し CliApple は Rejected。`settings_in_use` は options 設定時のみ発火（plain tmpfs は Mounts のまま）。
+- [x] Given 既存の `Mount::tmpfs_mount` / `bind_mount` / `volume_mount` / `with_read_only` の利用箇所, when 再実行する, then 従来と同じ引数が組み立てられる。→ スマートコンストラクタのシグネチャ維持。全 222 件の既存テスト無変更で通過。
+- [x] 既存 smoke の mount なし経路に回帰がない。→ `moon test` 229/229 PASS。
+
+## 実装メモ
+
+- `Mount` は `Bind(src,dst,AccessMode)` / `Volume(src,dst,AccessMode)` / `Tmpfs(dst,AccessMode,TmpfsOptions)` に拡張。`AccessMode`（ReadOnly/ReadWrite）で upstream と対応。`with_read_only` は挙動維持。
+- `TmpfsOptions.with_size` は base-1000（upstream と同一）。mode は permission-bit 整数を保持し、CLI は 8 進文字列、Engine API は JSON 数値に変換。
+- CLI argv は `tmpfs-size` / `tmpfs-mode` キー（`docker run --mount` の documented keys）。Apple CLI は `--tmpfs` に size/mode 記法がなく capability で拒否。
+- bind source 存在確認は `ensure_bind_sources_exist`（async、`@fs.exists`）を `start_via_cli` と `start_with_client` の双方で副作用前に実行。ローカル daemon 前提のため remote adapter 追加時は再評価（コードコメントに記載）。
+- tmpfs オプションを non-tmpfs mount に設定した場合は upstream 同様に反映時無視。
 
 ## テスト計画
 

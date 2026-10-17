@@ -129,15 +129,30 @@ fn create_request(image : GenericImage) -> CreateRequest raise {
   for m in image.mounts {
     match m {
       Bind(src, dst, ro) =>
-        binds.push("\{src}:\{dst}:\{if ro { "ro" } else { "rw" }}")
+        binds.push("\{src}:\{dst}:\{if ro is ReadOnly { "ro" } else { "rw" }}")
       Volume(src, dst, ro) =>
         mounts.push(
-          "{\"Type\":\"volume\",\"Source\":\{escape_json(src)},\"Target\":\{escape_json(dst)},\"ReadOnly\":\{ro}}",
+          "{\"Type\":\"volume\",\"Source\":\{escape_json(src)},\"Target\":\{escape_json(dst)},\"ReadOnly\":\{ro is ReadOnly}}",
         )
-      Tmpfs(dst) =>
-        mounts.push(
-          "{\"Type\":\"tmpfs\",\"Target\":\{escape_json(dst)},\"ReadOnly\":false}",
-        )
+      Tmpfs(dst, ro, opts) => {
+        let mut entry = "{\"Type\":\"tmpfs\",\"Target\":\{escape_json(dst)},\"ReadOnly\":\{ro is ReadOnly}"
+        if opts.size_bytes is Some(_) || opts.mode is Some(_) {
+          entry = entry + ",\"TmpfsOptions\":{"
+          let mut first = true
+          if opts.size_bytes is Some(bytes) {
+            entry = entry + "\"SizeBytes\":\{bytes}"
+            first = false
+          }
+          if opts.mode is Some(mode) {
+            if !first {
+              entry = entry + ","
+            }
+            entry = entry + "\"Mode\":\{mode}"
+          }
+          entry = entry + "}"
+        }
+        mounts.push(entry + "}")
+      }
     }
   }
   let env : Array[String] = []

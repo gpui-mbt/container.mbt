@@ -124,6 +124,11 @@ pub fn SocketConnectError::to_string(Self) -> String
 pub impl Show for SocketConnectError
 
 // Types and methods
+pub enum AccessMode {
+  ReadOnly
+  ReadWrite
+}
+
 pub enum Adapter {
   DirectDocker
   DirectXpc
@@ -417,14 +422,18 @@ pub async fn LogSubscription::run(Self) -> Unit
 pub async fn LogSubscription::stop(Self) -> Unit
 
 pub enum Mount {
-  Bind(String, String, Bool)
-  Volume(String, String, Bool)
-  Tmpfs(String)
+  Bind(String, String, AccessMode)
+  Volume(String, String, AccessMode)
+  Tmpfs(String, AccessMode, TmpfsOptions)
 }
 pub fn Mount::bind_mount(String, String) -> Self
 pub fn Mount::tmpfs_mount(String) -> Self
+pub fn Mount::tmpfs_mount_options(String, TmpfsOptions) -> Self
 pub fn Mount::volume_mount(String, String) -> Self
+pub fn Mount::with_mode(Self, Int) -> Self raise
 pub fn Mount::with_read_only(Self) -> Self
+pub fn Mount::with_size(Self, String) -> Self raise
+pub fn Mount::with_size_bytes(Self, Int64) -> Self raise
 
 pub struct PortMapping {
   host_port : Int
@@ -504,6 +513,7 @@ pub enum Setting {
   ReadonlyRootfs
   StartupTimeout
   CopyTo
+  TmpfsOptions
 }
 
 pub enum Support {
@@ -511,6 +521,15 @@ pub enum Support {
   Rejected(String)
   NotYetImplemented(Int)
 }
+
+pub struct TmpfsOptions {
+  size_bytes : Int64?
+  mode : Int?
+}
+pub fn TmpfsOptions::new() -> Self
+pub fn TmpfsOptions::with_mode(Self, Int) -> Self raise
+pub fn TmpfsOptions::with_size(Self, String) -> Self raise
+pub fn TmpfsOptions::with_size_bytes(Self, Int64) -> Self raise
 
 pub struct UnixSocket {
   stream : @raw_fd.RawFdStream

@@ -327,6 +327,7 @@ pub async fn GenericImage::start_with_client(
   client : DockerClient,
 ) -> Container {
   preflight(DirectDocker, self)
+  ensure_bind_sources_exist(self)
   let deadline = Deadline::after(self.startup_timeout_ms)
   ignore(ensure_owner_lock())
   let attempt = RunAttempt::prepare(self)
@@ -382,6 +383,19 @@ pub async fn GenericImage::start_with_client(
 }
 
 ///|
+/// 0044: bind sources must exist on the host before the first side
+/// effect. Both adapters talk to a local daemon (Unix socket / local
+/// CLI), so a host-local check is sound; a future remote-daemon adapter
+/// must re-evaluate this (the check would then be wrong by host).
+async fn ensure_bind_sources_exist(image : GenericImage) -> Unit {
+  for m in image.mounts {
+    if m is Bind(src, _, _) && !@fs.exists(src) {
+      fail("bind mount source does not exist: \{src}")
+    }
+  }
+}
+
+///|
 /// Run a container via the selected runtime's CLI adapter without a
 /// shell — reached only through `start_cli` (0019).
 async fn GenericImage::start_via_cli(
@@ -392,6 +406,7 @@ async fn GenericImage::start_via_cli(
   ignore(ensure_owner_lock())
   let attempt = RunAttempt::prepare(self)
   let args = build_run_args(runtime, self, attempt~)
+  ensure_bind_sources_exist(self)
   if attempt.user_named() &&
     name_in_use_via(runtime.executable(), attempt.name()) {
     fail("container name is already in use: \{attempt.name()}")

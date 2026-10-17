@@ -42,6 +42,8 @@ pub enum Setting {
   StartupTimeout
   /// 0033: pre-start archive upload (PUT /containers/{id}/archive).
   CopyTo
+  /// 0044: tmpfs size/mode mount options.
+  TmpfsOptions
 }
 
 ///|
@@ -69,6 +71,7 @@ fn Setting::name(self : Setting) -> String {
     ReadonlyRootfs => "read-only rootfs"
     StartupTimeout => "startup timeout"
     CopyTo => "copy-to"
+    TmpfsOptions => "tmpfs options"
   }
 }
 
@@ -123,7 +126,8 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | Platform
         | ReadonlyRootfs
         | StartupTimeout
-        | CopyTo => Supported
+        | CopyTo
+        | TmpfsOptions => Supported
       }
     CliDocker =>
       match setting {
@@ -148,7 +152,8 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | Network
         | Platform
         | ReadonlyRootfs
-        | StartupTimeout => Supported
+        | StartupTimeout
+        | TmpfsOptions => Supported
       }
     CliApple =>
       match setting {
@@ -169,6 +174,11 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         ExitWait => NotYetImplemented(38)
         HttpWait => NotYetImplemented(36)
         CopyTo => NotYetImplemented(33)
+        // `container run --tmpfs` has no documented size/mode notation.
+        TmpfsOptions =>
+          Rejected(
+            "tmpfs size/mode is not supported by the Apple container CLI",
+          )
         Command
         | Entrypoint
         | ContainerName
@@ -216,6 +226,12 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
   }
   if image.mounts.length() > 0 {
     used.push(Mounts)
+    for m in image.mounts {
+      if m is Tmpfs(_, _, opts) &&
+        (opts.size_bytes is Some(_) || opts.mode is Some(_)) {
+        used.push(TmpfsOptions)
+      }
+    }
   }
   for ready in image.ready_conditions {
     match ready {
@@ -347,7 +363,7 @@ fn validate_image_request(image : GenericImage) -> Unit raise {
     let (kind, source, destination) = match mount {
       Bind(src, dst, _) => ("bind", src, dst)
       Volume(src, dst, _) => ("volume", src, dst)
-      Tmpfs(dst) => ("tmpfs", "", dst)
+      Tmpfs(dst, _, _) => ("tmpfs", "", dst)
     }
     guard destination.has_prefix("/") &&
       !destination.contains(",") &&

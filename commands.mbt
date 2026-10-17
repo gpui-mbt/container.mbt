@@ -78,14 +78,21 @@ pub fn build_run_args(
     args.push(mapping.as_publish_argument())
   }
   for mount in image.mounts {
-    let (kind, source, destination, is_read_only) = match mount {
-      Bind(src, dst, ro) => ("bind", src, dst, ro)
-      Volume(src, dst, ro) => ("volume", src, dst, ro)
-      Tmpfs(dst) => ("tmpfs", "", dst, false)
+    let (kind, source, destination, is_read_only, tmpfs) = match mount {
+      Bind(src, dst, ro) => ("bind", src, dst, ro is ReadOnly, None)
+      Volume(src, dst, ro) => ("volume", src, dst, ro is ReadOnly, None)
+      Tmpfs(dst, ro, opts) => ("tmpfs", "", dst, ro is ReadOnly, Some(opts))
     }
     let mut option = "type=\{kind},target=\{destination}"
     if kind != "tmpfs" {
       option = option + ",source=\{source}"
+    } else if tmpfs is Some(opts) {
+      if opts.size_bytes is Some(bytes) {
+        option = option + ",tmpfs-size=\{bytes}"
+      }
+      if opts.mode is Some(mode) {
+        option = option + ",tmpfs-mode=\{octal_string(mode)}"
+      }
     }
     if is_read_only {
       option = option + ",readonly"
@@ -98,6 +105,23 @@ pub fn build_run_args(
     args.push(part)
   }
   args
+}
+
+///|
+/// Octal rendering for `--mount tmpfs-mode=` (Docker parses it as an
+/// octal permission string). Input is already validated non-negative.
+fn octal_string(value : Int32) -> String {
+  if value == 0 {
+    return "0"
+  }
+  let digits : Array[Char] = []
+  let mut v = value
+  while v > 0 {
+    digits.push(('0'.to_int() + v % 8).unsafe_to_char())
+    v = v / 8
+  }
+  digits.rev_in_place()
+  String::from_array(digits)
 }
 
 ///|
