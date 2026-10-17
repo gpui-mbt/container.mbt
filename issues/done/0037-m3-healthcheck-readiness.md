@@ -1,6 +1,6 @@
 # [P1 / M3] Healthcheck builder と healthy/unhealthy wait を実装
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -56,12 +56,12 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given `HEALTHCHECK` 付きイメージと `WaitFor::healthcheck()`, when healthy になる, then readiness が完了し、`starting` の間は deadline まで待機が継続する。
-- [ ] Given healthcheck が `unhealthy` を返すコンテナ, when wait する, then deadline を待たずに即失敗し、エラーが unhealthy と識別できる。
-- [ ] Given healthcheck 未設定のコンテナ, when `WaitFor::healthcheck()` を指定する, then running 観測後に healthcheck 未設定の明示エラーで失敗し、成功扱いされない。
-- [ ] Given Apple Container 経路, when healthcheck を指定する, then コンテナ作成前に明示エラーになり、副作用がない。
-- [ ] Given 複数の conditions があり healthcheck が途中にある, when 前段で時間を消費する, then healthcheck の待機は同じ deadline の残り時間で打ち切られる。
-- [ ] 既存の log / duration readiness と 0004 の他の preflight が回帰しない。
+- [x] Given `HEALTHCHECK` 付きイメージと `WaitFor::healthcheck()`, when healthy になる, then readiness が完了し、`starting` の間は deadline まで待機が継続する。(wbtest: scripted mock engine — starting×2 → healthy)
+- [x] Given healthcheck が `unhealthy` を返すコンテナ, when wait する, then deadline を待たずに即失敗し、エラーが unhealthy と識別できる。(wbtest: 1 poll で失敗)
+- [x] Given healthcheck 未設定のコンテナ, when `WaitFor::healthcheck()` を指定する, then running 観測後に healthcheck 未設定の明示エラーで失敗し、成功扱いされない。(wbtest: not-running → running で失敗)
+- [x] Given Apple Container 経路, when healthcheck を指定する, then コンテナ作成前に明示エラーになり、副作用がない。(capability matrix: CliApple/DirectXpc は NotYetImplemented — preflight が副作用前に拒否)
+- [x] Given 複数の conditions があり healthcheck が途中にある, when 前段で時間を消費する, then healthcheck の待機は同じ deadline の残り時間で打ち切られる。(`startup_command_timeout_ms` で共有 deadline にクランプ)
+- [x] 既存の log / duration readiness と 0004 の他の preflight が回帰しない。(195/195 pass)
 
 ## テスト計画
 
@@ -97,3 +97,14 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の Readiness 行。
 - 証跡要件: health state の遷移と失敗時の判定根拠（unhealthy / 未設定の区別）をログまたは artifact に残す。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+## 実装記録 (完了時追記)
+
+- `healthcheck.mbt`: `Healthcheck` 型 + `cmd_shell`/`cmd`/`none` constructors + `with_interval`/`with_timeout`/`with_retries`/`with_start_period`/`with_start_interval` builders。フィールド名は `test_args`(`test` は keyword)。
+- `GenericImage::with_healthcheck` → `Config.Healthcheck` として create JSON に配線(ナノ秒変換、空は unwired = `to_docker_json` が None)。
+- `ContainerInspect.health` = `State.Health.Status`。
+- `Container::healthcheck_wait_until`: 100ms poll、4 分岐(healthy 完了 / unhealthy 即失敗 / starting 継続 / running 観測後の Health 不在 = "no healthcheck configured")。共有 deadline でクランプ。
+- Capability: `DirectDocker` HealthcheckWait → Supported、CLI adapters は据え置き(NYI 37)。
+- wbtest 7 件(builder/JSON fragment/create serialization/4 分岐×3/CLI refusal/capability gate)。
+- 実機 Docker での HEALTHCHECK E2E: **未実行**(CI の 0020 smoke_linux にケース追加が残る)。
+- smoke_apple への preflight 拒否ケース追加: 物理 Mac 不在のため **未実行**。

@@ -108,6 +108,7 @@ pub struct GenericImage {
   mappings : Array[PortMapping]
   mounts : Array[Mount]
   ready_conditions : Array[WaitFor]
+  mut healthcheck : Healthcheck?
   mut startup_timeout_ms : Int32
   mut working_dir : String?
   mut user : String?
@@ -133,6 +134,7 @@ pub fn GenericImage::new(name : String, tag : String) -> GenericImage raise {
     mappings: [],
     mounts: [],
     ready_conditions: [],
+    healthcheck: None,
     startup_timeout_ms: 60000,
     working_dir: None,
     user: None,

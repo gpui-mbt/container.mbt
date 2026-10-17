@@ -150,6 +150,7 @@ pub async fn Container::wait_ready(Self, Array[WaitFor], Int) -> Unit
 pub struct ContainerInspect {
   running : Bool
   exit_code : Int?
+  health : String?
   env : Array[String]
   ports : ResolvedPorts
   networks : ContainerNetworks
@@ -278,6 +279,7 @@ pub struct GenericImage {
   mappings : Array[PortMapping]
   mounts : Array[Mount]
   ready_conditions : Array[WaitFor]
+  mut healthcheck : Healthcheck?
   mut startup_timeout_ms : Int
   mut working_dir : String?
   mut user : String?
@@ -300,6 +302,7 @@ pub fn GenericImage::with_copy_to(Self, String, CopyDataSource, mode? : Int64, u
 pub fn GenericImage::with_entrypoint(Self, String) -> Self
 pub fn GenericImage::with_env_var(Self, String, String) -> Self
 pub fn GenericImage::with_exposed_port(Self, ContainerPort) -> Self raise
+pub fn GenericImage::with_healthcheck(Self, Healthcheck) -> Self
 pub fn GenericImage::with_label(Self, String, String) -> Self
 pub fn GenericImage::with_mapped_port(Self, Int, ContainerPort) -> Self raise
 pub fn GenericImage::with_mount(Self, Mount) -> Self
@@ -310,6 +313,23 @@ pub fn GenericImage::with_startup_timeout(Self, Int) -> Self raise
 pub fn GenericImage::with_user(Self, String) -> Self
 pub fn GenericImage::with_wait_for(Self, WaitFor) -> Self
 pub fn GenericImage::with_working_dir(Self, String) -> Self
+
+pub struct Healthcheck {
+  test_args : Array[String]
+  mut interval_ms : Int?
+  mut timeout_ms : Int?
+  mut retries : Int?
+  mut start_period_ms : Int?
+  mut start_interval_ms : Int?
+}
+pub fn Healthcheck::cmd(Array[String]) -> Self
+pub fn Healthcheck::cmd_shell(String) -> Self
+pub fn Healthcheck::none() -> Self
+pub fn Healthcheck::with_interval(Self, Int) -> Self
+pub fn Healthcheck::with_retries(Self, Int) -> Self
+pub fn Healthcheck::with_start_interval(Self, Int) -> Self
+pub fn Healthcheck::with_start_period(Self, Int) -> Self
+pub fn Healthcheck::with_timeout(Self, Int) -> Self
 
 pub struct HttpResponse {
   status : Int

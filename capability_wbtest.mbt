@@ -222,12 +222,13 @@ test "adapter resolution never falls back to CLI" {
 
 ///|
 /// 0019: a NYI setting fails before the adapter is even contacted.
-/// start(Docker) with a healthcheck wait must raise the matrix error —
+/// start(Docker) with an exit wait must raise the matrix error —
 /// not a transport error — proving zero requests left the client.
+/// (Healthcheck waits became Supported for DirectDocker in 0037.)
 async test "matrix rejection precedes any socket traffic" {
-  let image = GenericImage::new("a", "1").with_wait_for(WaitFor::healthcheck())
+  let image = GenericImage::new("a", "1").with_wait_for(WaitFor::when_exited())
   try image.start(Docker) catch {
-    Failure::Failure(msg) => assert_true(msg.contains("healthcheck"))
+    Failure::Failure(msg) => assert_true(msg.contains("exit"))
     err => fail("expected matrix rejection, got \{err}")
   } noraise {
     _ => fail("expected failure")

@@ -107,6 +107,7 @@ priv struct CreateRequest {
   bindings : Array[(String, String, String)]
   binds : Array[String]
   mounts : Array[String]
+  healthcheck : String?
 }
 
 ///|
@@ -159,6 +160,10 @@ fn create_request(image : GenericImage) -> CreateRequest raise {
     bindings,
     binds,
     mounts,
+    healthcheck: match image.healthcheck {
+      Some(hc) => hc.to_docker_json()
+      None => None
+    },
   }
 }
 
@@ -203,6 +208,10 @@ fn CreateRequest::to_json(self : CreateRequest) -> String {
       buf.write_string(":{}")
     }
     buf.write_char('}')
+  }
+  if self.healthcheck is Some(hc) {
+    buf.write_string(",\"Healthcheck\":")
+    buf.write_string(hc)
   }
   if self.network is Some(n) {
     buf.write_string(",\"NetworkingConfig\":{\"EndpointsConfig\":{")
@@ -373,6 +382,9 @@ const DOCKER_REMOVE_TIMEOUT_MS : Int32 = 60_000
 pub struct ContainerInspect {
   running : Bool
   exit_code : Int32?
+  /// `State.Health.Status` — Some only when the daemon reports one
+  /// (issue 0037): "starting" / "healthy" / "unhealthy".
+  health : String?
   /// `Config.Env` as `["KEY=VALUE", ...]` — used by exec env merge (0012).
   env : Array[String]
   ports : ResolvedPorts
@@ -440,7 +452,15 @@ pub async fn DockerClient::inspect_container(
             }
             _ => (ResolvedPorts::empty(), ContainerNetworks::empty())
           }
-          { running, exit_code, env, ports, networks, }
+          let health = match s.get("Health") {
+            Some(Object(h)) =>
+              match h.get("Status") {
+                Some(String(st)) => Some(st)
+                _ => None
+              }
+            _ => None
+          }
+          { running, exit_code, env, ports, networks, health, }
         }
         _ =>
           raise EngineError::MalformedResponse(

@@ -104,7 +104,6 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
       NotYetImplemented(23)
     DirectDocker =>
       match setting {
-        HealthcheckWait => NotYetImplemented(37)
         ExitWait => NotYetImplemented(38)
         Command
         | Entrypoint
@@ -117,6 +116,7 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | Mounts
         | ReadyWait
         | HttpWait
+        | HealthcheckWait
         | WorkingDir
         | User
         | Network
@@ -238,6 +238,9 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
   }
   if image.platform is Some(_) {
     used.push(Platform)
+  }
+  if image.healthcheck is Some(_) {
+    used.push(HealthcheckWait)
   }
   if image.readonly_rootfs {
     used.push(ReadonlyRootfs)

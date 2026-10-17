@@ -584,8 +584,8 @@ async fn Container::wait_ready_until(
         self.wait_for_log_until(message, "stderr", deadline)
       MessageOnEither(message) =>
         self.wait_for_log_until(message, "both", deadline)
-      Healthcheck | Exit =>
-        fail("readiness strategy is not implemented by the CLI adapters")
+      Healthcheck => self.healthcheck_wait_until(deadline)
+      Exit => fail("readiness strategy is not implemented by the CLI adapters")
       Http(strategy) => self.http_wait_until(strategy, deadline)
     }
   }
@@ -662,4 +662,35 @@ pub async fn Container::copy_file_to_host(
     }
   }
   @fs.write_file(abs, bytes[:])
+}
+
+///|
+/// Poll `State.Health.Status` every 100 ms until the shared startup
+/// deadline (issue 0037, upstream health strategy). Four branches:
+/// `healthy` completes, `unhealthy` fails fast, `starting` continues,
+/// and a missing `Health` object only fails once `Running` has been
+/// observed — before that the daemon may simply not have populated it.
+async fn Container::healthcheck_wait_until(
+  self : Container,
+  deadline : Int64,
+) -> Unit {
+  guard self.client is Some(client) else {
+    fail("readiness strategy is not implemented by the CLI adapters")
+  }
+  while true {
+    let inspect = client.inspect_container(self.id)
+    match inspect.health {
+      Some("healthy") => return
+      Some("unhealthy") => fail("container reported unhealthy")
+      Some(_) => ()
+      // `Health` absent while `Running` is true means the container has
+      // no healthcheck configured; while still starting the daemon may
+      // not have populated the object yet, so keep polling.
+      None =>
+        if inspect.running {
+          fail("container has no healthcheck configured")
+        }
+    }
+    @async.sleep(startup_command_timeout_ms(deadline, 100))
+  }
 }

@@ -65,7 +65,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0034 copy_file_from でファイルを安全に取り出す](./done/0034-m3-copy-from-bounded-archive.md) — P1 / deps: 0011, 0007
 - [x] [0035 tar 作成/展開と path traversal の安全性](./done/0035-m3-tar-path-security.md) — P0 / deps: 0033, 0034
 - [x] [0036 WaitFor::http と HTTP status/header/body 条件を移植](./done/0036-m3-http-readiness.md) — P1 / deps: 0014
-- [ ] [0037 Healthcheck builder と healthy/unhealthy wait を実装](./polished/0037-m3-healthcheck-readiness.md) — P1 / deps: 0011
+- [x] [0037 Healthcheck builder と healthy/unhealthy wait を実装](./done/0037-m3-healthcheck-readiness.md) — P1 / deps: 0011
 - [ ] [0038 WaitFor::exit と exec 待機条件を移植](./polished/0038-m3-exit-cmd-wait.md) — P1 / deps: 0011, 0012
 - [ ] [0039 環境変数待ちと複数 ready conditions の意味論](./polished/0039-m3-advanced-readiness.md) — P2 / deps: 0036, 0037, 0038
 - [ ] [0040 LogConsumer 継続配信と backpressure を実装](./polished/0040-m3-log-consumer-backpressure.md) — P1 / deps: 0013
