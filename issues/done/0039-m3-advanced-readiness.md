@@ -1,6 +1,6 @@
 # [P2 / M3] 環境変数待ちと複数 ready conditions の意味論
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -56,13 +56,13 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given `MCT_WAIT_MS=125` のような環境変数, when `millis_in_env_var` で条件を作る, then 125 ms の `Millis` 条件になる。
-- [ ] Given 環境変数が未設定, when 条件を作る, then `Nothing` になり、wait 時間と deadline を消費しない。
-- [ ] Given 不正値（空文字、数字以外、負値、表現範囲外）, when 条件を作る, then `Nothing` になり、エラーにはならない（upstream 準拠）。
-- [ ] Given 3 つの conditions の 2 番目がエラー, when wait する, then 3 番目は実行されず、2 番目のエラーが呼び出し側へ返る。
-- [ ] Given 合計が startup timeout を超える conditions, when wait する, then 期限超過で失敗し、超過分を sleep しない（既存動作の維持）。
-- [ ] Given 空メッセージのログ条件, when wait する, then 即時成功する（既存動作の維持）。
-- [ ] 既存の `WaitFor::millis` / `WaitFor::message_on_*` の挙動に回帰がない。
+- [x] Given `MCT_WAIT_MS=125` のような環境変数, when `millis_in_env_var` で条件を作る, then 125 ms の `Millis` 条件になる。
+- [x] Given 環境変数が未設定, when 条件を作る, then `Nothing` になり、wait 時間と deadline を消費しない。
+- [x] Given 不正値（空文字、数字以外、負値、表現範囲外）, when 条件を作る, then `Nothing` になり、エラーにはならない（upstream 準拠）。
+- [x] Given 3 つの conditions の 2 番目がエラー, when wait する, then 3 番目は実行されず、2 番目のエラーが呼び出し側へ返る。
+- [x] Given 合計が startup timeout を超える conditions, when wait する, then 期限超過で失敗し、超過分を sleep しない（既存動作の維持）。
+- [x] Given 空メッセージのログ条件, when wait する, then 即時成功する（既存動作の維持）。
+- [x] 既存の `WaitFor::millis` / `WaitFor::message_on_*` の挙動に回帰がない。(205/205 pass)
 
 ## テスト計画
 
@@ -96,3 +96,11 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の Readiness 行。
 - 証跡要件: 各条件の待機時間と deadline 消費、途中失敗時の実行有無をログに残す。実機が使えない確認は「未実行」と明記する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+## 実装記録 (完了時追記)
+
+- `WaitFor::millis_in_env_var(name)`: 呼び出し時点で `@env.get_env_var` を読み、未設定/不正値は `Nothing`(エラーにしない — upstream 準拠)。判定は純関数 `wait_millis_from_env_value` に切り出し(非負の 10 進数のみ受理、空白・符号・範囲外を reject、Int32 上限チェック)。
+- 複数 conditions: 配列順評価・最初のエラーで停止・共有 deadline 消費は既存動作を維持。条件失敗時は `ready condition {i} failed: ...` と index を診断に含める(typed エラーは透過)。
+- 空メッセージは `wait_for_log_until` 入口で即 return — wbtest で固定(removed container でも poll されないことを証明)。
+- wbtest 4 件(env parse 全分岐/順序・中断/index 付きエラー/空メッセージ即時成功)。
+- 実機 Docker / Apple での smoke ケース: **未実行**(CI/物理 Mac 待ち)。

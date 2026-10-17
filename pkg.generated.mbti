@@ -523,6 +523,7 @@ pub fn WaitFor::message_on_either_std(String) -> Self
 pub fn WaitFor::message_on_stderr(String) -> Self
 pub fn WaitFor::message_on_stdout(String) -> Self
 pub fn WaitFor::millis(Int) -> Self
+pub fn WaitFor::millis_in_env_var(String) -> Self
 pub fn WaitFor::nothing() -> Self
 pub fn WaitFor::seconds(Int) -> Self
 pub fn WaitFor::when_exited() -> Self

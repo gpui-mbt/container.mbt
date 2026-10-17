@@ -565,28 +565,38 @@ async fn Container::wait_ready_until(
   conditions : Array[WaitFor],
   deadline : Int64,
 ) -> Unit {
-  for ready in conditions {
+  for i = 0; i < conditions.length(); i = i + 1 {
+    let ready = conditions[i]
     let remaining = startup_remaining_ms(deadline)
-    match ready {
-      Nothing => ()
-      Millis(ms) => {
-        guard ms >= 0 else { fail("wait duration must not be negative") }
-        if ms > remaining {
-          // Why not sleep past the total deadline when one condition is too long.
-          @async.sleep(remaining)
-          fail("startup timeout exceeded")
+    // Run each condition in order; the first failure propagates with
+    // the condition index and stops later conditions (0039). Typed
+    // errors (EngineError, ...) re-raise untouched — only plain
+    // Failure diagnostics gain the index prefix.
+    try {
+      match ready {
+        Nothing => ()
+        Millis(ms) => {
+          guard ms >= 0 else { fail("wait duration must not be negative") }
+          if ms > remaining {
+            // Why not sleep past the total deadline when one condition is too long.
+            @async.sleep(remaining)
+            fail("startup timeout exceeded")
+          }
+          @async.sleep(ms)
         }
-        @async.sleep(ms)
+        MessageOnStdout(message) =>
+          self.wait_for_log_until(message, "stdout", deadline)
+        MessageOnStderr(message) =>
+          self.wait_for_log_until(message, "stderr", deadline)
+        MessageOnEither(message) =>
+          self.wait_for_log_until(message, "both", deadline)
+        Healthcheck => self.healthcheck_wait_until(deadline)
+        Exit(expected) => self.exit_wait_until(expected, deadline)
+        Http(strategy) => self.http_wait_until(strategy, deadline)
       }
-      MessageOnStdout(message) =>
-        self.wait_for_log_until(message, "stdout", deadline)
-      MessageOnStderr(message) =>
-        self.wait_for_log_until(message, "stderr", deadline)
-      MessageOnEither(message) =>
-        self.wait_for_log_until(message, "both", deadline)
-      Healthcheck => self.healthcheck_wait_until(deadline)
-      Exit(expected) => self.exit_wait_until(expected, deadline)
-      Http(strategy) => self.http_wait_until(strategy, deadline)
+    } catch {
+      Failure::Failure(msg) => fail("ready condition \{i} failed: \{msg}")
+      err => raise err
     }
   }
   ignore(startup_remaining_ms(deadline))

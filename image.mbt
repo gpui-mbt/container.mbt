@@ -52,6 +52,40 @@ pub fn WaitFor::nothing() -> WaitFor {
 }
 
 ///|
+/// Build a millisecond wait from an environment variable read at call
+/// time (upstream `WaitFor::millis_in_env_var`). Unset, empty,
+/// non-numeric, negative, or out-of-range values produce `Nothing` —
+/// not an error. Invalid env values become `Nothing` while a negative
+/// literal `Millis` is rejected in `wait_ready_until`; that asymmetry
+/// is upstream's.
+pub fn WaitFor::millis_in_env_var(name : String) -> WaitFor {
+  match wait_millis_from_env_value(@env.get_env_var(name)) {
+    Some(ms) => Millis(ms)
+    None => Nothing
+  }
+}
+
+///|
+/// Parse an env value into a millisecond count — the pure core of
+/// `millis_in_env_var` (0039). `None` on unset/empty/non-numeric/
+/// negative/out-of-range; leading/trailing whitespace is not trimmed
+/// (upstream `str::parse` does not trim either).
+fn wait_millis_from_env_value(value : String?) -> Int32? {
+  guard value is Some(v) else { return None }
+  guard v.length() > 0 else { return None }
+  // Decimal parse — no sign, digits only; anything else is invalid.
+  let mut n : Int64 = 0
+  for c in v {
+    guard c is ('0'..<='9') else { return None }
+    n = n * 10 + (c.to_int() - '0'.to_int()).to_int64()
+    if n > 2147483647L {
+      return None
+    }
+  }
+  Some(n.to_int())
+}
+
+///|
 /// Explicitly request a healthcheck wait. CLI runtime adapters fail before launch.
 pub fn WaitFor::healthcheck() -> WaitFor {
   Healthcheck
