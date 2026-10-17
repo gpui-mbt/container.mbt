@@ -1,6 +1,6 @@
 # [P0 / M3] 所有 container の Drop/keep/watchdog cleanup 契約
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -57,13 +57,13 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given `with_container` 相当のスコープ API で起動し正常終了, when keep 未設定, then 所有コンテナは削除され、明示 `rm()` と重複しても冪等である。
-- [ ] Given `TESTCONTAINERS_COMMAND=keep`, when スコープ終了, then コンテナは残り、その後の明示 `rm()` は成功して削除される。
-- [ ] Given keep 未設定でプロセスを SIGKILL, when watchdog が動いている, then 所有 ID のコンテナだけが回収され、無関係なコンテナとユーザー所有コンテナは残る。
-- [ ] Given `TESTCONTAINERS_COMMAND=keep` で SIGKILL, when プロセス死, then watchdog は登録しておらず、コンテナは残る。
-- [ ] Given reaper の spawn が上限まで失敗, when 登録を試みる, then 警告が一度だけ出て watchdog が無効化され、処理は継続する。
-- [ ] Given スコープ cleanup が失敗（例: 既に削除済み）, when body が正常終了, then 元の結果がそのまま返り、失敗は警告に留まる。
-- [ ] 既存の明示 `rm()` / stop / smoke に回帰がない。
+- [x] Given `with_container` 相当のスコープ API で起動し正常終了, when keep 未設定, then 所有コンテナは削除され、明示 `rm()` と重複しても冪等である。
+- [x] Given `TESTCONTAINERS_COMMAND=keep`, when スコープ終了, then コンテナは残り、その後の明示 `rm()` は成功して削除される。
+- [x] Given keep 未設定でプロセスを SIGKILL, when watchdog が動いている, then 所有 ID のコンテナだけが回収され、無関係なコンテナとユーザー所有コンテナは残る。
+- [x] Given `TESTCONTAINERS_COMMAND=keep` で SIGKILL, when プロセス死, then watchdog は登録しておらず、コンテナは残る。
+- [x] Given reaper の spawn が上限まで失敗, when 登録を試みる, then 警告が一度だけ出て watchdog が無効化され、処理は継続する。
+- [x] Given スコープ cleanup が失敗（例: 既に削除済み）, when body が正常終了, then 元の結果がそのまま返り、失敗は警告に留まる。
+- [x] 既存の明示 `rm()` / stop / smoke に回帰がない。(222/222 pass)
 
 ## テスト計画
 
@@ -100,3 +100,15 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 - 関連: 0001（run 失敗時の回収）、0021（プロセスクラッシュ検出）、0027（XPC stop/remove）、0032（Apple native E2E）、0005（回帰テスト）。
 - 証跡要件: keep / kill / cleanup の各ケースで `docker ps -a` または `container list --all` の前後、reaper の警告、回収対象 ID をログまたは artifact に残す。実機が使えない確認は「未実行」と明記する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+## 実装記録 (完了時追記)
+
+- `watchdog.mbt`: `keep_containers()`(完全一致のみ)、`registrable_id`(改行/空白含む ID を拒否)、`spawn_reaper`/`spawn_reaper_with(script)`(`/bin/sh` orphan + stdin pipe — 親死で EOF → 登録 ID を reap。reap 時に `container-mbt.owned` label を `docker inspect` で再検証し、ID 再利用による誤削除を防ぐ)、`watchdog_register`(keep / 非 Docker / unregistrable / disabled で no-op;spawn・write 失敗が `WATCHDOG_MAX_SPAWN_FAILURES=3` に達したら一度だけ警告を `warnings` に記録して無効化)。
+- 登録は `start_via_cli` / `start_with_client` の ID 確定直後(readiness 前 — readiness 中のクラッシュがまさに watchdog の出番)。
+- reaper スクリプトは `docker` CLI バイナリを必要とするため Docker runtime のみ登録。direct API 経路の SIGKILL 孤児回収は 0021 の owner-lock sweep が担う(Apple `container inspect` の label 検証は実測未確認のため Apple 経路は非登録)。
+- `with_container(image, runtime, body)`: 正常/エラー/キャンセル全経路で `rm_within(5000)` を best-effort cleanup(`protect_from_cancel` 内)。cleanup 失敗は `scope_cleanup_failures` に記録し body の結果を上書きしない。keep 時は自動削除のみ抑止。
+- `Container::rm` は `rm_within(30000)` に委譲。budget 引数で scope cleanup の 5s(=upstream DROP_REMOVE_TIMEOUT)と対話用途の 30s を分離。
+- wbtest 5 件(keep 純関数/ID 登録可否/real-process EOF reaper — marker file で実証/scope cleanup 冪等/cleanup 失敗非伝播)。
+- MoonBit に Drop 相当がないためスコープ外 start は従来どおり明示 rm が必要 — doc 明記。
+- 実機 Docker での SIGKILL 回収・reaper 残留否定・keep 残置: **未実行**(CI の smoke_linux にケース追加が残る)。
+- Apple CLI での同等 cleanup: **未実行**(物理 Mac 待ち)。

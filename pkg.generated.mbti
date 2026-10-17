@@ -58,6 +58,8 @@ pub fn process_uid() -> Int
 
 pub fn release_lock(Int) -> Unit
 
+pub let scope_cleanup_failures : Array[String]
+
 pub fn try_owner_lock(String) -> Int? raise
 
 pub fn unix_accept(Int) -> Int? raise
@@ -160,6 +162,7 @@ pub async fn Container::get_host_port_ipv6(Self, ContainerPort) -> Int
 pub fn Container::id(Self) -> String
 pub async fn Container::logs(Self) -> ProcessOutput
 pub async fn Container::rm(Self) -> Unit
+pub async fn Container::rm_within(Self, Int) -> Unit
 pub fn Container::runtime(Self) -> Runtime
 pub async fn Container::stop(Self) -> Unit
 pub async fn Container::stop_with_timeout(Self, Int?) -> Unit
@@ -316,6 +319,7 @@ pub async fn GenericImage::start_cli(Self, Runtime) -> Container
 pub async fn GenericImage::start_detected(Self) -> Container
 pub async fn GenericImage::start_with_client(Self, DockerClient) -> Container
 pub fn GenericImage::with_cmd(Self, Array[String]) -> Self
+pub async fn[T] GenericImage::with_container(Self, Runtime, (Container) -> T raise) -> T
 pub fn GenericImage::with_container_name(Self, String) -> Self
 pub fn GenericImage::with_copy_to(Self, String, CopyDataSource, mode? : Int64, uid? : Int64, gid? : Int64) -> Self raise
 pub fn GenericImage::with_entrypoint(Self, String) -> Self

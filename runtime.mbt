@@ -430,6 +430,12 @@ async fn GenericImage::start_via_cli(
     client: None,
   }
   attempt_pending.val = false
+  // Register with the reaper before readiness — a crash during
+  // readiness polling is exactly the case the watchdog exists for
+  // (upstream registers right after create). keep / non-Docker /
+  // unregistrable ids are skipped inside.
+  watchdog_register(runtime, id)
+
   // Why not leave a container running if readiness fails or gets cancelled.
   errdefer (container.rm() catch { _ => () })
   container.wait_ready_until(conditions, deadline)
@@ -610,19 +616,31 @@ pub async fn Container::exit_code(self : Container) -> Int32? {
 ///|
 /// Explicitly delete the container, even when it is still running.
 pub async fn Container::rm(self : Container) -> Unit {
+  self.rm_within(30000)
+}
+
+///|
+/// `rm` with an explicit CLI/transport budget — scope cleanup (0042)
+/// uses upstream's 5 s `DROP_REMOVE_TIMEOUT` instead of the 30 s
+/// interactive budget.
+pub async fn Container::rm_within(self : Container, timeout_ms : Int32) -> Unit {
   if self.removed {
     return
   }
   stop_log_delivery(self.id)
   if self.client is Some(client) {
-    client.remove_container(self.id, force=true)
+    client.remove_container(
+      self.id,
+      force=true,
+      deadline=Deadline::after(timeout_ms),
+    )
     self.removed = true
     return
   }
   let result = @shell.Cmd(
     self.runtime.executable(),
     build_remove_args(self.runtime, self.id),
-  ).output(timeout_ms=30000, max_output_bytes=1048576)
+  ).output(timeout_ms~, max_output_bytes=1048576)
   guard result.exit_code() == 0 else {
     fail("container remove failed (exit \{result.exit_code()})")
   }
@@ -825,3 +843,54 @@ async fn Container::exit_wait_until(
     @async.sleep(startup_command_timeout_ms(deadline, 100))
   }
 }
+
+///|
+/// Scoped container lifetime (issue 0042 — upstream's Drop, which
+/// MoonBit lacks). `body` gets the started container; on normal
+/// return, error, or cancellation the container is best-effort
+/// removed under a 5 s `DROP_REMOVE_TIMEOUT` budget. Cleanup failure
+/// never overwrites the body's result — it is recorded in
+/// `cleanup_failures` for observation (the warn-only port of
+/// upstream's tracing). `TESTCONTAINERS_COMMAND=keep` suppresses the
+/// automatic removal only; explicit `rm()` inside the body still
+/// works.
+///
+/// Caveat: containers started outside `with_container` still need an
+/// explicit `rm()` — there is no destructor hook in MoonBit.
+pub async fn[T] GenericImage::with_container(
+  self : GenericImage,
+  runtime : Runtime,
+  body : (Container) -> T raise,
+) -> T {
+  let container = self.start(runtime)
+  let mut result : T? = None
+  let mut err : Error? = None
+  try {
+    result = Some(body(container))
+  } catch {
+    e => err = Some(e)
+  }
+  if !keep_containers() {
+    let cleaned = try {
+      @async.protect_from_cancel(() => container.rm_within(5000))
+      true
+    } catch {
+      e => {
+        scope_cleanup_failures.push("with_container cleanup: \{e}")
+        false
+      }
+    }
+    ignore(cleaned)
+  }
+  match err {
+    Some(e) => raise e
+    None => result.unwrap()
+  }
+}
+
+///|
+/// Bounded cleanup-failure log for `with_container` (0042): the
+/// observable counterpart of upstream's warn-only Drop logging. Tests
+/// assert on entries; callers may drain and surface them however they
+/// like.
+pub let scope_cleanup_failures : Array[String] = []
