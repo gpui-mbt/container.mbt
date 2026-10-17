@@ -205,6 +205,41 @@ fn wait_millis_from_env_value(value : String?) -> Int32? {
 }
 
 ///|
+/// Deep-enough copy for the direct start path (0048): the attempt's
+/// synthetic name and ownership label are applied to the copy so the
+/// caller's builder is never mutated by `start_with_client`. Every
+/// `with_*` field is carried; arrays are copied elementwise.
+fn GenericImage::snapshot(self : GenericImage) -> GenericImage {
+  {
+    name: self.name,
+    tag: self.tag,
+    command: self.command.copy(),
+    entrypoint: self.entrypoint,
+    container_name: self.container_name,
+    env_vars: self.env_vars.copy(),
+    labels: self.labels.copy(),
+    mappings: self.mappings.copy(),
+    mounts: self.mounts.copy(),
+    ready_conditions: self.ready_conditions.copy(),
+    healthcheck: self.healthcheck,
+    startup_timeout_ms: self.startup_timeout_ms,
+    working_dir: self.working_dir,
+    user: self.user,
+    network: self.network,
+    hostname: self.hostname,
+    extra_hosts: self.extra_hosts.copy(),
+    privileged: self.privileged,
+    cap_add: self.cap_add.copy(),
+    cap_drop: self.cap_drop.copy(),
+    shm_size_bytes: self.shm_size_bytes,
+    init: self.init,
+    platform: self.platform,
+    readonly_rootfs: self.readonly_rootfs,
+    copy_to: self.copy_to.copy(),
+  }
+}
+
+///|
 /// Explicitly request a healthcheck wait. CLI runtime adapters fail before launch.
 pub fn WaitFor::healthcheck() -> WaitFor {
   Healthcheck
@@ -269,8 +304,8 @@ pub enum ExtraHost {
 ///|
 /// A compact, MoonBit-owned equivalent of GenericImage and ContainerRequest.
 pub struct GenericImage {
-  name : String
-  tag : String
+  mut name : String
+  mut tag : String
   mut command : Array[String]
   mut entrypoint : String?
   mut container_name : String?
@@ -278,7 +313,7 @@ pub struct GenericImage {
   mut labels : Array[(String, String)]
   mappings : Array[PortMapping]
   mounts : Array[Mount]
-  ready_conditions : Array[WaitFor]
+  mut ready_conditions : Array[WaitFor]
   mut healthcheck : Healthcheck?
   mut startup_timeout_ms : Int32
   mut working_dir : String?
@@ -345,6 +380,30 @@ pub fn GenericImage::with_cmd(
 }
 
 ///|
+/// Override the image name used by `descriptor()` (upstream request
+/// `image_name` wins over the image's own name, 0048). Non-empty.
+pub fn GenericImage::with_name(
+  self : GenericImage,
+  name : String,
+) -> GenericImage raise {
+  guard name != "" else { fail("image name must not be empty") }
+  self.name = name
+  self
+}
+
+///|
+/// Override the image tag used by `descriptor()` (upstream request
+/// `image_tag`, 0048). Non-empty.
+pub fn GenericImage::with_tag(
+  self : GenericImage,
+  tag : String,
+) -> GenericImage raise {
+  guard tag != "" else { fail("image tag must not be empty") }
+  self.tag = tag
+  self
+}
+
+///|
 pub fn GenericImage::with_entrypoint(
   self : GenericImage,
   entrypoint : String,
@@ -398,6 +457,19 @@ pub fn GenericImage::with_label(
 }
 
 ///|
+/// Bulk label merge — per-key last-wins over existing entries, in
+/// argument order (upstream `with_labels` extend, 0048).
+pub fn GenericImage::with_labels(
+  self : GenericImage,
+  labels : Array[(String, String)],
+) -> GenericImage {
+  for (k, v) in labels {
+    ignore(self.with_label(k, v))
+  }
+  self
+}
+
+///|
 pub fn GenericImage::with_mapped_port(
   self : GenericImage,
   host_port : Int32,
@@ -432,6 +504,18 @@ pub fn GenericImage::with_wait_for(
   ready : WaitFor,
 ) -> GenericImage {
   self.ready_conditions.push(ready)
+  self
+}
+
+///|
+/// Replace the whole readiness list — last call wins (upstream
+/// `with_ready_conditions`, 0048). Distinct from `with_wait_for`,
+/// which accumulates one condition per call.
+pub fn GenericImage::with_ready_conditions(
+  self : GenericImage,
+  conditions : Array[WaitFor],
+) -> GenericImage {
+  self.ready_conditions = conditions.copy()
   self
 }
 

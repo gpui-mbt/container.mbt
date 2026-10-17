@@ -1,6 +1,6 @@
 # [P1 / M3] ImageExt・ContainerRequest の override 契約を整える
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -63,13 +63,13 @@ upstream の `Image`（記述子）と `ContainerRequest`（起動時 override�
 
 ## 受け入れ条件
 
-- [ ] Given `with_env_var("A", "one")` の後に `with_env_var("A", "two")`, when run 引数を構築する, then `A=two` が 1 回だけ出力される（既存テストの維持）。
-- [ ] Given `with_label("k", "v1")` の後に `with_labels([("k", "v2")])`, when run 引数を構築する, then `k=v2` が 1 回だけ出力される。
-- [ ] Given `with_ready_conditions([...])` を 2 回呼ぶ, when start する, then 最後のリストだけが readiness に使われる。
-- [ ] Given `with_name` / `with_tag` を指定, when `descriptor()` を評価する, then override が優先され、未指定時は `GenericImage::new` の値になる。
-- [ ] Given start 後に builder へ `with_env_var` / `with_label` / `with_cmd` / `with_wait_for` を追加する, when 既存 Container を操作する, then 既存 Container の挙動が変わらない（mappings の既存テストと同じ契約）。
-- [ ] Given `with_wait_for` を複数回呼ぶ, when start する, then 現行どおり蓄積され、`with_ready_conditions` とは区別される。
-- [ ] Given `smoke` / `smoke_apple` を含む既存コード, when ビルド・実行する, then 変更なしでコンパイル・動作する。
+- [x] Given `with_env_var("A", "one")` の後に `with_env_var("A", "two")`, when run 引数を構築する, then `A=two` が 1 回だけ出力される（既存テストの維持）。
+- [x] Given `with_label("k", "v1")` の後に `with_labels([("k", "v2")])`, when run 引数を構築する, then `k=v2` が 1 回だけ出力される。
+- [x] Given `with_ready_conditions([...])` を 2 回呼ぶ, when start する, then 最後のリストだけが readiness に使われる。
+- [x] Given `with_name` / `with_tag` を指定, when `descriptor()` を評価する, then override が優先され、未指定時は `GenericImage::new` の値になる。
+- [x] Given start 後に builder へ `with_env_var` / `with_label` / `with_cmd` / `with_wait_for` を追加する, when 既存 Container を操作する, then 既存 Container の挙動が変わらない（mappings の既存テストと同じ契約）。
+- [x] Given `with_wait_for` を複数回呼ぶ, when start する, then 現行どおり蓄積され、`with_ready_conditions` とは区別される。
+- [x] Given `smoke` / `smoke_apple` を含む既存コード, when ビルド・実行する, then 変更なしでコンパイル・動作する。
 
 ## テスト計画
 
@@ -101,3 +101,17 @@ upstream の `Image`（記述子）と `ContainerRequest`（起動時 override�
 - 関連: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の "ContainerRequest / labels / mounts" 行。0010（create / start）と 0049（エラー分類）、0051（consumer API）が本契約に依存する。
 - 証跡として override 対応表と wbtest の対象一覧を issue または docs に残す（0050 / 0053 の比較と revision 記録に接続）。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+
+## 実装メモ（upstream 対応表）
+
+| upstream (request.rs / image_ext.rs) | 意味論 | MoonBit `GenericImage` | 判定 |
+|---|---|---|---|
+| `image_name` / `image_tag` override | descriptor は override 優先 | `with_name` / `with_tag`（非空必須）→ `descriptor()` | 一致 |
+| `overridden_cmd`（空なら image CMD） | 置換、空でフォールバック | `with_cmd` は置換（`command.copy()`）。空配列 → Cmd フィールド無しでイメージ既定 CMD — upstream と同等の結果 | 一致 |
+| env マージ（request 勝ち） | キー単位 last-wins | `with_env_var` が既存キー除去+末尾追加 | 一致（順序は契約外） |
+| `with_label` / `with_labels` | キー単位 insert / extend | 同名 `with_label`、bulk 版 `with_labels` 追加 | 一致 |
+| `with_ready_conditions` | リスト置換・後勝ち | `with_ready_conditions` 追加（入力を copy） | 一致 |
+| `with_wait_for` 相当 | upstream は conditions 置換のみ | `with_wait_for` は蓄積のまま維持（既存互換） | 意図的差異 |
+
+snapshot 境界: `build_run_args` は argv を即時 materialize するため CLI 経路は既に非影響。direct 経路は `start_with_client` が `self` に合成 name/label を注入していたため `snapshot()` で分離 — 呼び出し側 builder は不変になった（wbtest で固定）。Container は image を保持しない。

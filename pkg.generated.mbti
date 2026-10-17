@@ -304,8 +304,8 @@ pub enum ExtraHost {
 }
 
 pub struct GenericImage {
-  name : String
-  tag : String
+  mut name : String
+  mut tag : String
   mut command : Array[String]
   mut entrypoint : String?
   mut container_name : String?
@@ -313,7 +313,7 @@ pub struct GenericImage {
   mut labels : Array[(String, String)]
   mappings : Array[PortMapping]
   mounts : Array[Mount]
-  ready_conditions : Array[WaitFor]
+  mut ready_conditions : Array[WaitFor]
   mut healthcheck : Healthcheck?
   mut startup_timeout_ms : Int
   mut working_dir : String?
@@ -354,14 +354,18 @@ pub fn GenericImage::with_host_gateway(Self, String) -> Self raise
 pub fn GenericImage::with_hostname(Self, String) -> Self raise
 pub fn GenericImage::with_init(Self) -> Self
 pub fn GenericImage::with_label(Self, String, String) -> Self
+pub fn GenericImage::with_labels(Self, Array[(String, String)]) -> Self
 pub fn GenericImage::with_mapped_port(Self, Int, ContainerPort) -> Self raise
 pub fn GenericImage::with_mount(Self, Mount) -> Self
+pub fn GenericImage::with_name(Self, String) -> Self raise
 pub fn GenericImage::with_network(Self, String) -> Self
 pub fn GenericImage::with_platform(Self, String) -> Self
 pub fn GenericImage::with_privileged(Self, Bool) -> Self
 pub fn GenericImage::with_readonly_rootfs(Self, Bool) -> Self
+pub fn GenericImage::with_ready_conditions(Self, Array[WaitFor]) -> Self
 pub fn GenericImage::with_shm_size(Self, Int64) -> Self raise
 pub fn GenericImage::with_startup_timeout(Self, Int) -> Self raise
+pub fn GenericImage::with_tag(Self, String) -> Self raise
 pub fn GenericImage::with_user(Self, String) -> Self
 pub fn GenericImage::with_wait_for(Self, WaitFor) -> Self
 pub fn GenericImage::with_working_dir(Self, String) -> Self

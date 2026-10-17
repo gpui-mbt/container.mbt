@@ -76,7 +76,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0045 hostname・ExtraHost・network を API と実行経路に追加](./done/0045-m3-hostname-extra-hosts-networks.md) — P1 / deps: 0010
 - [x] [0046 privileged・capability・shm・init 等を移植](./done/0046-m3-resource-security-options.md) — P1 / deps: 0010
 - [ ] [0047 Mac 専用 kernel/ssh/masked/readonly path オプション](./polished/0047-m3-macos-special-options.md) — P2 / deps: 0024, 0026
-- [ ] [0048 ImageExt・ContainerRequest の override 契約を整える](./polished/0048-m3-image-request-api-parity.md) — P1 / deps: 0010
+- [x] [0048 ImageExt・ContainerRequest の override 契約を整える](./done/0048-m3-image-request-api-parity.md) — P1 / deps: 0010
 - [ ] [0049 公開エラー型と失敗分類の一貫性を検証](./polished/0049-m3-typed-errors-failure-matrix.md) — P1 / deps: 0017, 0024
 - [ ] [0050 Rust upstream と MoonBit の同一 fixture 比較基盤](./polished/0050-m3-conformance-oracle.md) — P0 / deps: 0020, 0032
 - [ ] [0051 Mooncakes consumer から使える公開 API・文書・配布](./polished/0051-m3-consumer-docs-publish.md) — P2 / deps: 0048

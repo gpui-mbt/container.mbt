@@ -335,6 +335,7 @@ pub async fn GenericImage::start_with_client(
   // Same identity contract as the CLI adapter: the attempt name and the
   // ownership label let a later run find and collect this run's leavings.
   let attempt_image = self
+    .snapshot()
     .with_container_name(attempt.name())
     .with_label(OWNERSHIP_LABEL, attempt.owner_id())
   ignore(client.resolve_or_pull_image(self.descriptor(), deadline~))
