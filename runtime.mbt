@@ -10,6 +10,10 @@ pub struct Container {
   /// Lazily cached first object of `docker inspect` output — backs both
   /// dynamic-port (0014) and bridge-IP/network (0015) resolution.
   priv mut inspect_obj : Json?
+  /// When `Some`, this container was created through the direct Engine
+  /// adapter (issue 0019) and lifecycle operations go over the Unix
+  /// socket instead of spawning the CLI.
+  priv client : DockerClient?
 }
 
 ///|
@@ -100,10 +104,16 @@ async fn Container::inspect_object(self : Container) -> Json {
 
 ///|
 /// `docker inspect <id>` → `NetworkSettings.Ports`, resolved once and
-/// cached.
+/// cached. Direct-path containers use `inspect_container` on the socket
+/// instead of spawning `docker inspect`.
 async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
   if self.resolved_ports is Some(p) {
     return p
+  }
+  if self.client is Some(client) {
+    let ports = client.inspect_container(self.id).ports
+    self.resolved_ports = Some(ports)
+    return ports
   }
   let obj = self.inspect_object()
   let ports = match obj {
@@ -126,6 +136,9 @@ async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
 /// `docker inspect <id>` → `NetworkSettings.Networks`, normalized to
 /// name → `IPAddress` (0015).
 async fn Container::inspect_networks(self : Container) -> ContainerNetworks {
+  if self.client is Some(client) {
+    return client.inspect_container(self.id).networks
+  }
   let obj = self.inspect_object()
   match obj {
     Object(m) =>
@@ -267,8 +280,76 @@ async fn collect_owned_container(
 }
 
 ///|
-/// Run a container via the selected native runtime CLI without a shell.
+/// Start a container through the runtime's direct adapter (issue 0019):
+/// `Runtime::Docker` resolves to the Docker Engine API on the Unix
+/// socket — no `docker` CLI process is spawned — and `AppleContainer`
+/// targets the M2 XPC adapter, which fails explicitly (no CLI fallback)
+/// until issues 0023+ land. Select the CLI deliberately via `start_cli`.
+/// Unsupported settings are rejected by the capability matrix before
+/// any pull/create side effect; a direct-transport failure (missing
+/// socket, daemon down) propagates as-is.
 pub async fn GenericImage::start(
+  self : GenericImage,
+  runtime : Runtime,
+) -> Container {
+  let adapter = adapter_for(runtime)
+  preflight(adapter, self)
+  match adapter {
+    DirectDocker => self.start_with_client(DockerClient::new())
+    DirectXpc =>
+      fail(
+        "Apple Container XPC adapter is not yet implemented (issues 0023-0032); use start_cli to select the CLI explicitly",
+      )
+    CliDocker | CliApple => self.start_via_cli(runtime)
+  }
+}
+
+///|
+/// Explicit CLI adapter selection (0019). This is the only route that
+/// spawns `docker`/`container` processes; the CLI adapters are kept for
+/// one release beyond the direct adapters' E2E acceptance (issues
+/// 0020/0032) and are then slated for removal.
+pub async fn GenericImage::start_cli(
+  self : GenericImage,
+  runtime : Runtime,
+) -> Container {
+  preflight(cli_adapter_for(runtime), self)
+  self.start_via_cli(runtime)
+}
+
+///|
+/// Direct Engine-API start (0019): resolve/pull → create+start under
+/// one startup deadline, then readiness. The returned `Container`
+/// carries the client so exec/logs/stop/rm/inspect also use the socket.
+/// Separable from `start` so tests can point at a mock daemon.
+pub async fn GenericImage::start_with_client(
+  self : GenericImage,
+  client : DockerClient,
+) -> Container {
+  let deadline = Deadline::after(self.startup_timeout_ms)
+  ignore(client.resolve_or_pull_image(self.descriptor(), deadline~))
+  let id = client.create_and_start(self, deadline~)
+  let container : Container = {
+    id,
+    runtime: Docker,
+    mappings: self.mappings.copy(),
+    removed: false,
+    resolved_ports: None,
+    inspect_obj: None,
+    client: Some(client),
+  }
+  errdefer (container.rm() catch { _ => () })
+  container.wait_ready_until(
+    self.ready_conditions.copy(),
+    @async.now() + deadline.remaining_ms(),
+  )
+  container
+}
+
+///|
+/// Run a container via the selected runtime's CLI adapter without a
+/// shell — reached only through `start_cli` (0019).
+async fn GenericImage::start_via_cli(
   self : GenericImage,
   runtime : Runtime,
 ) -> Container {
@@ -310,6 +391,7 @@ pub async fn GenericImage::start(
     removed: false,
     resolved_ports: None,
     inspect_obj: None,
+    client: None,
   }
   attempt_pending.val = false
   // Why not leave a container running if readiness fails or gets cancelled.
@@ -326,12 +408,22 @@ pub async fn GenericImage::start_detected(self : GenericImage) -> Container {
 
 ///|
 /// Capture stdout and stderr from a one-shot container command.
+/// Direct-path containers go through `POST /exec` (0012); CLI-path
+/// containers spawn `docker exec`.
 pub async fn Container::exec(
   self : Container,
   command : Array[String],
 ) -> ProcessOutput {
   guard !self.removed else { fail("container already removed") }
   guard command.length() > 0 else { fail("exec command must not be empty") }
+  if self.client is Some(client) {
+    let r = client.exec(self.id, cmd=command)
+    return {
+      exit_code: r.exit_code,
+      stdout: @utf8.decode_lossy(r.stdout),
+      stderr: @utf8.decode_lossy(r.stderr),
+    }
+  }
   let result = @shell.Cmd(
     self.runtime.executable(),
     build_exec_args(self.id, command),
@@ -351,12 +443,22 @@ pub async fn Container::logs(self : Container) -> ProcessOutput {
 
 ///|
 /// Allow startup readiness to shorten a CLI log read to remaining time.
+/// Direct-path containers use `GET /containers/{id}/logs` (0013)
+/// bounded to the shared deadline instead.
 async fn Container::logs_with_timeout(
   self : Container,
   timeout_ms : Int32,
 ) -> ProcessOutput {
   guard !self.removed else { fail("container already removed") }
   guard timeout_ms > 0 else { fail("log timeout must be positive") }
+  if self.client is Some(client) {
+    let logs = client.logs(self.id, deadline=Deadline::after(timeout_ms))
+    return {
+      exit_code: 0,
+      stdout: @utf8.decode_lossy(logs.stdout),
+      stderr: @utf8.decode_lossy(logs.stderr),
+    }
+  }
   let result = @shell.Cmd(self.runtime.executable(), ["logs", self.id]).output(
     timeout_ms~,
     max_output_bytes=67108864,
@@ -375,6 +477,9 @@ async fn Container::logs_with_timeout(
 /// Stop an owned container without deleting it.
 pub async fn Container::stop(self : Container) -> Unit {
   guard !self.removed else { fail("container already removed") }
+  if self.client is Some(client) {
+    return client.stop_container(self.id)
+  }
   let result = @shell.Cmd(self.runtime.executable(), build_stop_args(self.id)).output(
     timeout_ms=30000,
     max_output_bytes=1048576,
@@ -388,6 +493,11 @@ pub async fn Container::stop(self : Container) -> Unit {
 /// Explicitly delete the container, even when it is still running.
 pub async fn Container::rm(self : Container) -> Unit {
   if self.removed {
+    return
+  }
+  if self.client is Some(client) {
+    client.remove_container(self.id, force=true)
+    self.removed = true
     return
   }
   let result = @shell.Cmd(

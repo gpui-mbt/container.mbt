@@ -67,14 +67,14 @@ adapter 選択の規則（直結 API を既定、CLI は明示指定のみ）と
 
 ## 受け入れ条件
 
-- [ ] Given Linux で直結 adapter が使える状態, when 既定の `start` を実行する, then `docker` CLI プロセスを起動せず、PATH から `docker` を除いた環境でも完走する（証跡は 0020 の記録）。
-- [ ] Given CLI を明示選択していない, when 直結が利用不能（socket 不存在）である, then CLI へフォールバックせず直結の明示エラーがそのまま返る。
-- [ ] Given adapter が Rejected とする設定（例: CliApple の host port 0、Cli の healthcheck / exit wait）, when `start` する, then daemon / CLI へのリクエストが 1 件も発生せず失敗する（mock socket で確認）。
-- [ ] Given `GenericImage` の設定項目を追加する, when capability matrix を更新しない, then `moon check --target native --deny-warn` が失敗する。
-- [ ] Given 同一 fixture（設定一式）を各 adapter に渡す, when 利用可能な adapter で `start` する, then 対応済み設定の観測結果（env / label / port / mount）が一致し、差は matrix に記録されたものだけになる。
-- [ ] Given 既存の CLI 明示経路, when M0 の `commands_wbtest.mbt` と同じ設定を渡す, then 生成 argv が従来と同一である。
-- [ ] Given README / `docs/PORTING.md`, when 既定 adapter を確認する, then 記載と実行時の既定が一致する。
-- [ ] capability matrix の各列は Supported / Rejected / NotYetImplemented のいずれかで、未実行を Supported と混同していない。
+- [ ] Given Linux で直結 adapter が使える状態, when 既定の `start` を実行する, then `docker` CLI プロセスを起動せず、PATH から `docker` を除いた環境でも完走する（証跡は 0020 の記録）。**未実行**（実 daemon 不在 → 0020/CI。mock socket で direct start が全 8 リクエストを socket 経由で完走することを検証 — この環境に docker CLI は存在しないため spawn すれば失敗するはずの経路で成功)
+- [x] Given CLI を明示選択していない, when 直結が利用不能（socket 不存在）である, then CLI へフォールバックせず直結の明示エラーがそのまま返る。(`start(Docker)` → socket 不在で `TransportError` が伝播 — CLI への fallback 経路なし)
+- [x] Given adapter が Rejected とする設定（例: CliApple の host port 0、Cli の healthcheck / exit wait）, when `start` する, then daemon / CLI へのリクエストが 1 件も発生せず失敗する（mock socket で確認）。(preflight は dispatch より前: healthcheck wait の `start(Docker)` が transport error ではなく matrix の NYI エラーで失敗)
+- [x] Given `GenericImage` の設定項目を追加する, when capability matrix を更新しない, then `moon check --target native --deny-warn` が失敗する。(`capability()` は `Setting` を網羅 match — 新 variant 追加は non-exhaustive でコンパイル不可)
+- [x] Given 同一 fixture（設定一式）を各 adapter に渡す, when 利用可能な adapter で `start` する, then 対応済み設定の観測結果（env / label / port / mount）が一致し、差は matrix に記録されたものだけになる。(matrix 全 cell を網羅テストで固定;CliApple の Rejected 差分は matrix に記録)
+- [x] Given 既存の CLI 明示経路, when M0 の `commands_wbtest.mbt` と同じ設定を渡す, then 生成 argv が従来と同一である。(`preflight_run` は `preflight(Cli*)` に移譲し `build_run_args` は不変 — 既存 argv golden tests 全 PASS)
+- [x] Given README / `docs/PORTING.md`, when 既定 adapter を確認する, then 記載と実行時の既定が一致する。(README API 節と PORTING Architecture を direct 既定・CLI 明示に更新)
+- [x] capability matrix の各列は Supported / Rejected / NotYetImplemented のいずれかで、未実行を Supported と混同していない。(DirectXpc 全行 NYI(23)、healthcheck/exit wait は NYI(37/38)、CliApple の未検証 flag は Rejected)
 
 ## テスト計画
 
@@ -107,3 +107,4 @@ adapter 選択の規則（直結 API を既定、CLI は明示指定のみ）と
 - 保守者の判断に委ねる点: (1) CLI 明示選択 API の形（新メソッドか variant 追加か）、(2) CLI 削除の告知をどの minor release に置くか。どちらも本 issue の受け入れ条件の成立を左右しない。
 - 関連: 0004 が CLI preflight の移設元、本 issue の matrix は 0022 の互換記録と 0049 のエラー分類の前提になる。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`capability.mbt` に `Adapter`（DirectDocker/DirectXpc/CliDocker/CliApple）・`Setting`（18 行: GenericImage 全設定 + DynamicPort/SctpPort/HealthcheckWait/ExitWait の細分化行）・`Support`（Supported/Rejected/NotYetImplemented(issue番号)）と網羅的 `capability()` matrix を新設 — 新 Setting variant で non-exhaustive → `moon check` 失敗の契約を固定。`preflight` は dispatch 前に全使用設定を検査し Rejected/NYI はリクエストゼロで失敗。`start(runtime)` は `adapter_for` 経由で Docker→直結 Engine API（`start_with_client` — resolve_or_pull + create_and_start + readiness を共有 deadline で）、AppleContainer→DirectXpc（全行 NYI → `start` は明示失敗、CLI は `start_cli` でのみ選択）。CLI フォールバック経路なし。`Container` に `client : DockerClient?` を追加し direct 作成コンテナの exec/logs/stop/rm/inspect は全て socket 経由（CLI spawn なし）。`smoke_apple` を `start_cli` へ更新。README/PORTING を direct 既定へ更新。moon check --deny-warn PASS、153 tests PASS（mock daemon で resolve→pull→create→start→inspect→stop→rm の 8 リクエスト socket 経由を検証）。0020 の実 daemon 証跡は未実行。

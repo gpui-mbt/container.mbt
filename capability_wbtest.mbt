@@ -160,3 +160,158 @@ test "accepted request keeps the smoke argv shape" {
   assert_true(joined.contains("--publish 18080:80/tcp"))
   assert_eq(args[args.length() - 4], "alpine:3.20")
 }
+
+///|
+/// 0019: every matrix cell is decided — Supported, Rejected, or
+/// NotYetImplemented — nothing is left implicit.
+test "capability matrix covers every adapter and setting" {
+  let adapters = [DirectDocker, DirectXpc, CliDocker, CliApple]
+  let settings = [
+    Command,
+    Entrypoint,
+    ContainerName,
+    EnvVars,
+    Labels,
+    Mappings,
+    DynamicPort,
+    SctpPort,
+    Mounts,
+    ReadyWait,
+    HealthcheckWait,
+    ExitWait,
+    WorkingDir,
+    User,
+    Network,
+    Platform,
+    ReadonlyRootfs,
+    StartupTimeout,
+  ]
+  for adapter in adapters {
+    for setting in settings {
+      // Merely evaluating the cell must not raise.
+      ignore(capability(adapter, setting))
+    }
+  }
+  // Spotlight cells that pin the 0019 contract.
+  assert_true(capability(CliApple, DynamicPort) is Rejected(_))
+  assert_true(capability(CliApple, SctpPort) is Rejected(_))
+  assert_true(capability(CliDocker, DynamicPort) is Supported)
+  assert_true(capability(DirectDocker, DynamicPort) is Supported)
+  assert_true(capability(DirectDocker, Mounts) is Supported)
+  assert_true(capability(DirectXpc, Command) is NotYetImplemented(_))
+  assert_true(capability(CliDocker, HealthcheckWait) is NotYetImplemented(_))
+  assert_true(capability(CliApple, ExitWait) is NotYetImplemented(_))
+}
+
+///|
+/// 0019: adapter resolution — start() targets direct adapters,
+/// start_cli() the CLI adapters; there is no implicit fallback.
+test "adapter resolution never falls back to CLI" {
+  assert_true(adapter_for(Docker) is DirectDocker)
+  assert_true(adapter_for(AppleContainer) is DirectXpc)
+  assert_true(cli_adapter_for(Docker) is CliDocker)
+  assert_true(cli_adapter_for(AppleContainer) is CliApple)
+}
+
+///|
+/// 0019: a NYI setting fails before the adapter is even contacted.
+/// start(Docker) with a healthcheck wait must raise the matrix error —
+/// not a transport error — proving zero requests left the client.
+async test "matrix rejection precedes any socket traffic" {
+  let image = GenericImage::new("a", "1").with_wait_for(WaitFor::healthcheck())
+  try image.start(Docker) catch {
+    Failure::Failure(msg) => assert_true(msg.contains("healthcheck"))
+    err => fail("expected matrix rejection, got \{err}")
+  } noraise {
+    _ => fail("expected failure")
+  }
+  // start(AppleContainer) selects DirectXpc — every setting NYI, and
+  // even a bare image fails at the adapter dispatch, not the CLI.
+  let bare = GenericImage::new("a", "1")
+  try bare.start(AppleContainer) catch {
+    Failure::Failure(msg) => assert_true(msg.contains("XPC"))
+    err => fail("expected XPC NYI error, got \{err}")
+  } noraise {
+    _ => fail("expected failure")
+  }
+}
+
+///|
+/// 0019: start(Docker) with no daemon must surface the direct
+/// transport's own error — never a silent CLI fallback.
+async test "missing socket propagates the direct-transport error" {
+  let image = GenericImage::new("a", "1")
+  try image.start(Docker) catch {
+    EngineError::TransportError(..) | EngineError::DeadlineExceeded(..) => ()
+    err => fail("expected a direct transport failure, got \{err}")
+  } noraise {
+    _ => fail("expected failure without a daemon")
+  }
+}
+
+///|
+/// 0019: full direct-path lifecycle against a mock daemon — resolve
+/// 404 → pull → resolve 200 → create → start → inspect ports → stop →
+/// rm, all on the socket, zero CLI processes (none exist in this
+/// environment, so any spawn would have failed the test).
+async test "direct start routes the whole lifecycle over the socket" {
+  let dir = @fs.tmpdir(prefix="container-mbt-engine")
+  let sock = "\{dir}/docker.sock"
+  let listen_fd = unix_listen(sock)
+  let captured : Array[String] = []
+  let wire : Array[String] = []
+  defer {
+    (unix_close_fd(listen_fd) catch { _ => () }) |> ignore
+    (@fs.remove(sock) catch { _ => () }) |> ignore
+  }
+  @async.with_task_group(group => {
+    group.spawn_bg(() => {
+      serve_mock_engine(
+        listen_fd,
+        8,
+        fn(request) {
+          wire.push(request)
+          if request.has_prefix("GET /images/") {
+            if wire.length() == 1 {
+              http_resp("404", "Not Found", "{\"message\":\"no such image\"}")
+            } else {
+              http_200("{}")
+            }
+          } else if request.has_prefix("POST /images/create") {
+            http_200("{\"status\":\"ok\"}")
+          } else if request.has_prefix("POST /containers/create") {
+            http_resp("201", "Created", "{\"Id\":\"abc123\"}")
+          } else if request.has_prefix("GET /containers/abc123/json") {
+            http_200(
+              "{\"State\":{\"Running\":true},\"NetworkSettings\":{\"Ports\":{\"80/tcp\":[{\"HostIp\":\"0.0.0.0\",\"HostPort\":\"49155\"}]}}}",
+            )
+          } else {
+            http_resp("204", "No Content", "")
+          }
+        },
+        captured,
+      )
+    })
+    let client = DockerClient::new(socket_path=sock)
+    let image = GenericImage::new("alpine", "3.20").with_exposed_port(
+      ContainerPort::tcp(80),
+    )
+    let container = image.start_with_client(client)
+    assert_eq(container.id(), "abc123")
+    // Dynamic port resolves through the API inspect, not the CLI.
+    assert_eq(container.get_host_port_ipv4(ContainerPort::tcp(80)), 49155)
+    container.stop()
+    container.rm()
+  })
+  // The wire saw: resolve, pull, resolve, create, start, inspect, stop,
+  // rm — exactly 8 requests, all over the socket.
+  assert_eq(wire.length(), 8)
+  assert_true(
+    wire[0].has_prefix("GET /images/alpine%3A3.20/json") ||
+    wire[0].has_prefix("GET /images/alpine:3.20/json"),
+  )
+  assert_true(wire[3].has_prefix("POST /containers/create"))
+  assert_true(wire[4].has_prefix("POST /containers/abc123/start"))
+  assert_true(wire[6].has_prefix("POST /containers/abc123/stop"))
+  assert_true(wire[7].has_prefix("DELETE /containers/abc123"))
+}

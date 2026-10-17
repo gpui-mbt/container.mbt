@@ -30,6 +30,8 @@ pub fn build_run_args(Runtime, GenericImage, attempt~ : RunAttempt) -> Array[Str
 
 pub fn build_stop_args(String) -> Array[String]
 
+pub fn capability(Adapter, Setting) -> Support
+
 pub fn classify_engine_error(op~ : String, context~ : EngineOp, status~ : Int, body~ : Bytes, target? : String, path? : String) -> EngineError
 
 pub async fn detect_runtime() -> Runtime
@@ -98,6 +100,13 @@ pub fn SocketConnectError::to_string(Self) -> String
 pub impl Show for SocketConnectError
 
 // Types and methods
+pub enum Adapter {
+  DirectDocker
+  DirectXpc
+  CliDocker
+  CliApple
+}
+
 pub struct Container {
   id : String
   runtime : Runtime
@@ -240,7 +249,9 @@ pub fn GenericImage::mappings(Self) -> Array[PortMapping]
 pub fn GenericImage::new(String, String) -> Self raise
 pub fn GenericImage::ready_conditions(Self) -> Array[WaitFor]
 pub async fn GenericImage::start(Self, Runtime) -> Container
+pub async fn GenericImage::start_cli(Self, Runtime) -> Container
 pub async fn GenericImage::start_detected(Self) -> Container
+pub async fn GenericImage::start_with_client(Self, DockerClient) -> Container
 pub fn GenericImage::with_cmd(Self, Array[String]) -> Self
 pub fn GenericImage::with_container_name(Self, String) -> Self
 pub fn GenericImage::with_entrypoint(Self, String) -> Self
@@ -331,6 +342,33 @@ pub(all) enum Runtime {
   AppleContainer
 }
 pub fn Runtime::executable(Self) -> String
+
+pub enum Setting {
+  Command
+  Entrypoint
+  ContainerName
+  EnvVars
+  Labels
+  Mappings
+  DynamicPort
+  SctpPort
+  Mounts
+  ReadyWait
+  HealthcheckWait
+  ExitWait
+  WorkingDir
+  User
+  Network
+  Platform
+  ReadonlyRootfs
+  StartupTimeout
+}
+
+pub enum Support {
+  Supported
+  Rejected(String)
+  NotYetImplemented(Int)
+}
 
 pub struct UnixSocket {
   stream : @raw_fd.RawFdStream

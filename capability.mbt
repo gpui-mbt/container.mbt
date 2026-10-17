@@ -1,9 +1,279 @@
 ///|
-/// Human-readable runtime name used in preflight rejection messages.
-fn Runtime::display_name(self : Runtime) -> String {
+/// The transport adapters a `start` can resolve to (issue 0019).
+/// `DirectDocker` is the default for `Runtime::Docker` (Docker Engine
+/// API over the Unix socket); `DirectXpc` is the M2 Apple adapter —
+/// every setting is `NotYetImplemented` until issues 0023–0032 land.
+/// `CliDocker`/`CliApple` are the CLI adapters, reachable only through
+/// the explicit `start_cli` selection — `start` never falls back to
+/// them silently.
+pub enum Adapter {
+  DirectDocker
+  DirectXpc
+  CliDocker
+  CliApple
+}
+
+///|
+/// One row per `GenericImage` setting (0019). The matrix switch on this
+/// enum is exhaustive: adding a variant without deciding every adapter
+/// column fails `moon check --deny-warn`. `DynamicPort`/`SctpPort`
+/// refine `Mappings`; `HealthcheckWait`/`ExitWait` refine
+/// `ReadyConditions` — the splits exist so each rejected value is
+/// decided by the matrix alone, not by scattered adapter checks.
+pub enum Setting {
+  Command
+  Entrypoint
+  ContainerName
+  EnvVars
+  Labels
+  Mappings
+  DynamicPort
+  SctpPort
+  Mounts
+  ReadyWait
+  HealthcheckWait
+  ExitWait
+  WorkingDir
+  User
+  Network
+  Platform
+  ReadonlyRootfs
+  StartupTimeout
+}
+
+///|
+/// Lowercase names for rejection messages — kept compatible with the
+/// 0004 wording ("healthcheck", "exit", "host port", ...).
+fn Setting::name(self : Setting) -> String {
   match self {
-    Docker => "Docker"
-    AppleContainer => "Apple Container"
+    Command => "command"
+    Entrypoint => "entrypoint"
+    ContainerName => "container name"
+    EnvVars => "environment variable"
+    Labels => "label"
+    Mappings => "port mapping"
+    DynamicPort => "dynamic host port"
+    SctpPort => "SCTP port"
+    Mounts => "mount"
+    ReadyWait => "log/duration wait"
+    HealthcheckWait => "healthcheck"
+    ExitWait => "exit"
+    WorkingDir => "working dir"
+    User => "user"
+    Network => "network"
+    Platform => "platform"
+    ReadonlyRootfs => "read-only rootfs"
+    StartupTimeout => "startup timeout"
+  }
+}
+
+///|
+/// Display name for adapter-specific rejection messages.
+fn Adapter::name(self : Adapter) -> String {
+  match self {
+    DirectDocker => "Docker Engine API"
+    DirectXpc => "Apple Container XPC"
+    CliDocker => "Docker CLI"
+    CliApple => "Apple Container CLI"
+  }
+}
+
+///|
+/// Per-cell verdict (0019). `Rejected` carries the verbatim reason
+/// (kept identical to the 0004 CLI preflight wording so existing
+/// assertions hold); `NotYetImplemented` carries the tracking issue.
+pub enum Support {
+  Supported
+  Rejected(String)
+  NotYetImplemented(Int32)
+}
+
+///|
+/// The single source of adapter capability truth (0019). Cells must not
+/// mark a capability `Supported` that is merely untested — that is what
+/// `Rejected`/`NotYetImplemented` are for.
+pub fn capability(adapter : Adapter, setting : Setting) -> Support {
+  match adapter {
+    DirectXpc =>
+      // M2 (issues 0023–0032) has not landed; nothing is supported yet.
+      NotYetImplemented(23)
+    DirectDocker =>
+      match setting {
+        HealthcheckWait => NotYetImplemented(37)
+        ExitWait => NotYetImplemented(38)
+        Command
+        | Entrypoint
+        | ContainerName
+        | EnvVars
+        | Labels
+        | Mappings
+        | DynamicPort
+        | SctpPort
+        | Mounts
+        | ReadyWait
+        | WorkingDir
+        | User
+        | Network
+        | Platform
+        | ReadonlyRootfs
+        | StartupTimeout => Supported
+      }
+    CliDocker =>
+      match setting {
+        HealthcheckWait => NotYetImplemented(37)
+        ExitWait => NotYetImplemented(38)
+        Command
+        | Entrypoint
+        | ContainerName
+        | EnvVars
+        | Labels
+        | Mappings
+        | DynamicPort
+        | SctpPort
+        | Mounts
+        | ReadyWait
+        | WorkingDir
+        | User
+        | Network
+        | Platform
+        | ReadonlyRootfs
+        | StartupTimeout => Supported
+      }
+    CliApple =>
+      match setting {
+        DynamicPort =>
+          Rejected(
+            "automatic host port assignment is not yet verified on Apple Container; use with_mapped_port",
+          )
+        SctpPort =>
+          Rejected("SCTP port publishing is not supported on Apple container")
+        Mounts => Rejected("--mount is not yet verified on Apple Container")
+        Network => Rejected("--network is not yet verified on Apple Container")
+        Platform =>
+          Rejected("--platform is not yet verified on Apple Container")
+        User => Rejected("--user is not yet verified on Apple Container")
+        ReadonlyRootfs =>
+          Rejected("--read-only is not yet verified on Apple Container")
+        HealthcheckWait => NotYetImplemented(37)
+        ExitWait => NotYetImplemented(38)
+        Command
+        | Entrypoint
+        | ContainerName
+        | EnvVars
+        | Labels
+        | Mappings
+        | ReadyWait
+        | WorkingDir
+        | StartupTimeout => Supported
+      }
+  }
+}
+
+///|
+/// Which matrix rows a concrete `GenericImage` actually uses — only
+/// non-default settings are checked, so a bare image never trips a
+/// `Rejected` cell.
+fn settings_in_use(image : GenericImage) -> Array[Setting] {
+  let used : Array[Setting] = []
+  if image.command.length() > 0 {
+    used.push(Command)
+  }
+  if image.entrypoint is Some(_) {
+    used.push(Entrypoint)
+  }
+  if image.container_name is Some(_) {
+    used.push(ContainerName)
+  }
+  if image.env_vars.length() > 0 {
+    used.push(EnvVars)
+  }
+  if image.labels.length() > 0 {
+    used.push(Labels)
+  }
+  if image.mappings.length() > 0 {
+    used.push(Mappings)
+    for m in image.mappings {
+      if m.host_port() == 0 {
+        used.push(DynamicPort)
+      }
+      if m.container_port().protocol_name() == "sctp" {
+        used.push(SctpPort)
+      }
+    }
+  }
+  if image.mounts.length() > 0 {
+    used.push(Mounts)
+  }
+  for ready in image.ready_conditions {
+    match ready {
+      Nothing | Millis(_) => used.push(ReadyWait)
+      MessageOnStdout(_) | MessageOnStderr(_) | MessageOnEither(_) =>
+        used.push(ReadyWait)
+      Healthcheck => used.push(HealthcheckWait)
+      Exit => used.push(ExitWait)
+    }
+  }
+  if image.working_dir is Some(_) {
+    used.push(WorkingDir)
+  }
+  if image.user is Some(_) {
+    used.push(User)
+  }
+  if image.network is Some(_) {
+    used.push(Network)
+  }
+  if image.platform is Some(_) {
+    used.push(Platform)
+  }
+  if image.readonly_rootfs {
+    used.push(ReadonlyRootfs)
+  }
+  if image.startup_timeout_ms != 60000 {
+    used.push(StartupTimeout)
+  }
+  used
+}
+
+///|
+/// The single preflight entry point (0019): every setting the image
+/// uses is checked against the matrix BEFORE any daemon or CLI request
+/// — a `Rejected`/`NotYetImplemented` verdict means zero side effects.
+/// Value-level validation (names, duplicates, mount syntax) follows in
+/// `validate_image_request`.
+fn preflight(adapter : Adapter, image : GenericImage) -> Unit raise {
+  for setting in settings_in_use(image) {
+    match capability(adapter, setting) {
+      Supported => ()
+      Rejected(reason) =>
+        fail("\{setting.name()} rejected on \{adapter.name()}: \{reason}")
+      NotYetImplemented(issue) =>
+        fail(
+          "\{setting.name()} on \{adapter.name()} is not yet implemented (issue \{issue})",
+        )
+    }
+  }
+  validate_image_request(image)
+}
+
+///|
+/// The adapter a `Runtime` resolves to for `start` (0019). `Docker` is
+/// the direct Engine API; `AppleContainer` targets the M2 XPC adapter —
+/// which reports `NotYetImplemented` until 0023+ land, so `start` on
+/// Apple fails explicitly rather than silently using the CLI.
+fn adapter_for(runtime : Runtime) -> Adapter {
+  match runtime {
+    Docker => DirectDocker
+    AppleContainer => DirectXpc
+  }
+}
+
+///|
+/// The CLI adapter selected by `start_cli` — the only route that still
+/// spawns `docker`/`container` processes (0019).
+fn cli_adapter_for(runtime : Runtime) -> Adapter {
+  match runtime {
+    Docker => CliDocker
+    AppleContainer => CliApple
   }
 }
 
@@ -87,50 +357,8 @@ fn validate_image_request(image : GenericImage) -> Unit raise {
 /// Settings that are not verified on a runtime are rejections, never silent
 /// drops (upstream `linux_unsupported_request_reason` / `reject_sctp_ports` /
 /// `reject_duplicate_mapped_ports` / `normalize_platform` parity).
+/// Since 0019 the per-setting verdicts live in the capability matrix —
+/// this function is the CLI adapters' call site for `build_run_args`.
 fn preflight_run(runtime : Runtime, image : GenericImage) -> Unit raise {
-  for condition in image.ready_conditions {
-    match condition {
-      Nothing | MessageOnStdout(_) | MessageOnStderr(_) | MessageOnEither(_) =>
-        ()
-      Millis(ms) => if ms < 0 { fail("wait duration must not be negative") }
-      Healthcheck | Exit =>
-        fail(
-          "healthcheck and exit waits are not supported by the \{runtime.display_name()} CLI adapter",
-        )
-    }
-  }
-  if runtime is AppleContainer {
-    // Apple Container CLI parity for these flags is unverified; they are
-    // rejected here until `container run` support is confirmed on hardware.
-    if image.network is Some(_) {
-      fail("--network is not yet verified on Apple Container")
-    }
-    if image.platform is Some(_) {
-      fail("--platform is not yet verified on Apple Container")
-    }
-    if image.user is Some(_) {
-      fail("--user is not yet verified on Apple Container")
-    }
-    if image.mounts.length() > 0 {
-      fail("--mount is not yet verified on Apple Container")
-    }
-    if image.readonly_rootfs {
-      fail("--read-only is not yet verified on Apple Container")
-    }
-  }
-  if runtime is AppleContainer {
-    for mapping in image.mappings {
-      let host = mapping.host_port()
-      let port = mapping.container_port()
-      guard host != 0 else {
-        fail(
-          "automatic host port assignment is not yet verified on Apple Container; use with_mapped_port",
-        )
-      }
-      guard port.protocol_name() != "sctp" else {
-        fail("SCTP port publishing is not supported on Apple container")
-      }
-    }
-  }
-  validate_image_request(image)
+  preflight(cli_adapter_for(runtime), image)
 }

@@ -21,8 +21,8 @@ Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7a
 ## Architecture
 
 1. **MoonBit core:** configuration, validation, readiness models, argument construction and public container operations.
-2. **Temporary adapters:** native `moonbitlang/async/shell` process spawn with argv arrays. No shell string evaluation or Node.js.
-3. **Future parity adapters:** direct Docker Engine API on Linux and Apple Container XPC on Apple Silicon macOS. Runtime adapters must not influence the public API.
+2. **Direct adapters (default):** Docker Engine HTTP over the Unix socket on Linux (M1, issues 0006-0019); Apple Container XPC on Apple Silicon macOS (M2, issues 0023-0032). Runtime adapters must not influence the public API.
+3. **CLI adapters (explicit only):** `moonbitlang/async/shell` process spawn with argv arrays, selected only through `start_cli` — `start` never falls back to them. Kept until the direct adapters' E2E acceptance criteria (0020/0032) are met, then removed. No shell string evaluation or Node.js.
 
 ## Compatibility and safety constraints
 

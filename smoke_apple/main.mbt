@@ -8,7 +8,9 @@ async fn main {
     .with_mapped_port(18080, @container.ContainerPort::tcp(80))
     .with_wait_for(@container.WaitFor::message_on_stdout("moonbit-apple-ready"))
     .with_startup_timeout(60000)
-  let container = image.start(@container.AppleContainer)
+  // start() targets the M2 XPC adapter (not yet implemented); the CLI
+  // adapter is selected explicitly until 0023-0032 land (issue 0019).
+  let container = image.start_cli(@container.AppleContainer)
   // Why not retain a newly created VM after a failed assertion.
   errdefer (container.rm() catch { _ => () })
   // What: the CLI returns the fixed port rather than a fabricated dynamic port.
