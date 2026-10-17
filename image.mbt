@@ -40,7 +40,9 @@ pub enum WaitFor {
   MessageOnStderr(String)
   MessageOnEither(String)
   Healthcheck
-  Exit
+  /// Exit wait: `Some(code)` verifies the container's exit code,
+  /// `None` accepts any exit (upstream `WaitFor::exit` exit_code).
+  Exit(Int32?)
   Http(HttpWaitStrategy)
 }
 
@@ -56,9 +58,16 @@ pub fn WaitFor::healthcheck() -> WaitFor {
 }
 
 ///|
-/// Explicitly request an exit wait. CLI runtime adapters fail before launch.
+/// Wait for container exit regardless of exit code.
 pub fn WaitFor::when_exited() -> WaitFor {
-  Exit
+  Exit(None)
+}
+
+///|
+/// Wait for container exit and verify the exit code. A mismatch raises
+/// an error naming the expected and actual codes.
+pub fn WaitFor::exit_code(code : Int32) -> WaitFor {
+  Exit(Some(code))
 }
 
 ///|

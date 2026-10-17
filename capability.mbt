@@ -104,7 +104,6 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
       NotYetImplemented(23)
     DirectDocker =>
       match setting {
-        ExitWait => NotYetImplemented(38)
         Command
         | Entrypoint
         | ContainerName
@@ -117,6 +116,7 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | ReadyWait
         | HttpWait
         | HealthcheckWait
+        | ExitWait
         | WorkingDir
         | User
         | Network
@@ -223,7 +223,7 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
       MessageOnStdout(_) | MessageOnStderr(_) | MessageOnEither(_) =>
         used.push(ReadyWait)
       Healthcheck => used.push(HealthcheckWait)
-      Exit => used.push(ExitWait)
+      Exit(_) => used.push(ExitWait)
       Http(_) => used.push(HttpWait)
     }
   }

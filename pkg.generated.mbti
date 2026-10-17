@@ -127,6 +127,19 @@ pub enum Adapter {
   CliApple
 }
 
+pub enum CmdWaitFor {
+  Nothing
+  StdOutMessage(String)
+  StdErrMessage(String)
+  Duration(Int)
+  Exit(Int?)
+}
+pub fn CmdWaitFor::duration(Int) -> Self
+pub fn CmdWaitFor::exit(Int?) -> Self
+pub fn CmdWaitFor::nothing() -> Self
+pub fn CmdWaitFor::stderr_message(String) -> Self
+pub fn CmdWaitFor::stdout_message(String) -> Self
+
 pub struct Container {
   id : String
   runtime : Runtime
@@ -137,6 +150,7 @@ pub struct Container {
 pub async fn Container::copy_file_from(Self, String) -> Bytes
 pub async fn Container::copy_file_to_host(Self, String, dest~ : String) -> Unit
 pub async fn Container::exec(Self, Array[String]) -> ProcessOutput
+pub async fn Container::exec_wait(Self, Array[String], wait? : CmdWaitFor, timeout_ms? : Int) -> ProcessOutput
 pub async fn Container::get_bridge_ip_address(Self) -> String
 pub async fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int
 pub async fn Container::get_host_port_ipv6(Self, ContainerPort) -> Int
@@ -499,9 +513,10 @@ pub enum WaitFor {
   MessageOnStderr(String)
   MessageOnEither(String)
   Healthcheck
-  Exit
+  Exit(Int?)
   Http(HttpWaitStrategy)
 }
+pub fn WaitFor::exit_code(Int) -> Self
 pub fn WaitFor::healthcheck() -> Self
 pub fn WaitFor::http(HttpWaitStrategy) -> Self
 pub fn WaitFor::message_on_either_std(String) -> Self

@@ -1,6 +1,6 @@
 # [P1 / M3] WaitFor::exit と exec 待機条件を移植
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -57,12 +57,12 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given すぐ exit 0 するコンテナと `WaitFor::when_exited()`, when `start` する, then 停止が観測されて readiness が完了する。
-- [ ] Given exit 3 するコンテナと `WaitFor::exit_code(3)`, when wait する, then 成功する。`WaitFor::exit_code(0)` との組み合わせでは expected と actual を含む typed エラーになる。
-- [ ] Given exit code を取得できない状況, when 期待コード付き exit 待機をする, then 黙って成功せず明示エラーになる。
-- [ ] Given exec が期待メッセージを stdout に出す, when stdout 条件で待つ, then 成功する。stderr 条件では成功しない（混線しない）。
-- [ ] Given exec の終了コードが期待と異なる, when exit code 条件で検証する, then typed エラーになる。
-- [ ] 既存の log / duration readiness と条件なし `exec` に回帰がない。
+- [x] Given すぐ exit 0 するコンテナと `WaitFor::when_exited()`, when `start` する, then 停止が観測されて readiness が完了する。
+- [x] Given exit 3 するコンテナと `WaitFor::exit_code(3)`, when wait する, then 成功する。`WaitFor::exit_code(0)` との組み合わせでは expected と actual を含む typed エラーになる。
+- [x] Given exit code を取得できない状況, when 期待コード付き exit 待機をする, then 黙って成功せず明示エラーになる。
+- [x] Given exec が期待メッセージを stdout に出す, when stdout 条件で待つ, then 成功する。stderr 条件では成功しない（混線しない）。
+- [x] Given exec の終了コードが期待と異なる, when exit code 条件で検証する, then typed エラーになる。
+- [x] 既存の log / duration readiness と条件なし `exec` に回帰がない。(201/201 pass)
 
 ## テスト計画
 
@@ -98,3 +98,13 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の Readiness 行。
 - 証跡要件: 期待コードと実測コード、stdout / stderr の判定根拠をログまたは artifact に残す（PASS / FAIL / 未実行を混同しない）。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+## 実装記録 (完了時追記)
+
+- `WaitFor::Exit` に `Int32?` payload を追加: `when_exited()` → `Exit(None)`(コード不問)、`WaitFor::exit_code(code)` → `Exit(Some(code))`。
+- `Container::exit_wait_until`: `State.Running` を 100ms poll、停止後 `expected=None` は即成功、`Some(c)` は `State.ExitCode` と比較 — 不一致は "unexpected exit code: expected N, got M"、コード未取得は "did not report an exit code" の明示エラー(黙って成功しない)。
+- `exec_wait.mbt`: `CmdWaitFor`(`Nothing`/`StdOutMessage`/`StdErrMessage`/`Duration`/`Exit(code?)`) + `Container::exec_wait(command, wait?, timeout_ms?=60000)`。メッセージ照合は完走後バッファへの部分一致(非ストリーミング、API doc 明記)。`ProcessOutput` は常に exit_code を保持(direct path は undetermined を既にエラー化)するため code なし成功は起きない。
+- Capability: `DirectDocker` ExitWait → Supported。CLI adapters は据え置き(NYI 38)。
+- wbtest 6 件(構築/stop 検知/code 一致・不一致・未取得/CLI refusal/ストリーム別照合/exec_wait e2e)。
+- 実機 Docker での短命コンテナ E2E: **未実行**(CI の 0020 smoke_linux にケース追加が残る)。
+- Apple `container inspect` exit code 実測: 物理 Mac 不在のため **未実行**。

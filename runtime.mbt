@@ -585,7 +585,7 @@ async fn Container::wait_ready_until(
       MessageOnEither(message) =>
         self.wait_for_log_until(message, "both", deadline)
       Healthcheck => self.healthcheck_wait_until(deadline)
-      Exit => fail("readiness strategy is not implemented by the CLI adapters")
+      Exit(expected) => self.exit_wait_until(expected, deadline)
       Http(strategy) => self.http_wait_until(strategy, deadline)
     }
   }
@@ -690,6 +690,44 @@ async fn Container::healthcheck_wait_until(
         if inspect.running {
           fail("container has no healthcheck configured")
         }
+    }
+    @async.sleep(startup_command_timeout_ms(deadline, 100))
+  }
+}
+
+///|
+/// Poll `State.Running` every 100 ms until the container stops or the
+/// shared deadline expires (issue 0038, upstream `ExitWaitStrategy`).
+/// `expected: None` accepts any exit code; `Some(code)` compares the
+/// inspected `State.ExitCode` — a mismatch or an unobtainable code is
+/// an explicit error, never silent success.
+async fn Container::exit_wait_until(
+  self : Container,
+  expected : Int32?,
+  deadline : Int64,
+) -> Unit {
+  guard self.client is Some(client) else {
+    fail("readiness strategy is not implemented by the CLI adapters")
+  }
+  while true {
+    let inspect = client.inspect_container(self.id)
+    if !inspect.running {
+      match expected {
+        None => return
+        Some(code) =>
+          match inspect.exit_code {
+            Some(actual) =>
+              if actual == code {
+                return
+              } else {
+                fail("unexpected exit code: expected \{code}, got \{actual}")
+              }
+            None =>
+              fail(
+                "container exited but the daemon did not report an exit code",
+              )
+          }
+      }
     }
     @async.sleep(startup_command_timeout_ms(deadline, 100))
   }
