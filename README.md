@@ -7,7 +7,7 @@ MoonBit-native port of [shiguredo/container-rs](https://github.com/shiguredo/con
 ## Requirements
 
 - MoonBit with native backend, `moonbitlang/async` 0.22.4.
-- Linux with a running Docker-compatible engine (Unix socket at `/var/run/docker.sock` by default); the `docker` CLI is only needed for the explicit `start_cli` adapter.
+- Linux with a running Docker-compatible engine (Unix socket at `/var/run/docker.sock` by default; explicit `DockerClient::new(socket_path~)` selects another socket — no implicit discovery). Rootless and Podman compatibility is a measured-boundary record in [docs/ENGINE_COMPATIBILITY.md](docs/ENGINE_COMPATIBILITY.md), not a support claim. The `docker` CLI is only needed for the explicit `start_cli` adapter.
 - macOS 26 on Apple Silicon with Apple `container` installed and `container system start` completed.
 - No Node.js, Python, Rust, or Docker Desktop dependency in the MoonBit library.
 

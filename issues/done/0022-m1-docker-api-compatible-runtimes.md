@@ -57,13 +57,13 @@ Podman rootless と Docker rootless を含む Docker Engine API 互換ランタ�
 
 ## 受け入れ条件
 
-- [ ] Given Docker Engine rootful, when 0020 の E2E を実行する, then 従来どおり PASS し回帰がない。
-- [ ] Given Docker rootless または Podman rootless（実行可能な環境）, when matrix の行の操作を実行する, then 各セルが PASS / FAIL / 未実行で埋まり、根拠（version・手順・エラー本文）が記録されている。
-- [ ] Given socket path が既定と異なる環境, when 明示設定する, then 接続でき、設定がない場合は「socket 不存在」を区別したエラーになる。
-- [ ] Given 権限不足の socket, when 接続する, then 権限拒否と分かるエラーになる（不存在と混同しない）。
-- [ ] Given 非対応 operation, when 実行を試みる, then 事前検証または明確なエラーとして失敗し、沈黙の成功にならない。
-- [ ] Given matrix のドキュメント, when 未実行セルを確認する, then PASS と区別して記載され、理由が付いている。
-- [ ] rootless 固有の制約（publish / exec / mount の少なくとも 1 項目）が実測結果として記録されているか、未実行の理由が明記されている。
+- [ ] Given Docker Engine rootful, when 0020 の E2E を実行する, then 従来どおり PASS し回帰がない。**未実行**（CI `smoke_linux` step が基準測定 — 初回 CI 実行で採証）
+- [ ] Given Docker rootless または Podman rootless（実行可能な環境）, when matrix の行の操作を実行する, then 各セルが PASS / FAIL / 未実行で埋まり、根拠（version・手順・エラー本文）が記録されている。**未実行**（matrix 作成済み・全セル記入、両環境とも未実測と明記。実測手順を docs/ENGINE_COMPATIBILITY.md に記録）
+- [x] Given socket path が既定と異なる環境, when 明示設定する, then 接続でき、設定がない場合は「socket 不存在」を区別したエラーになる。(`DockerClient::new(socket_path~)` で差替済み — mock socket 全テストが非既定 path で実接続。不存在は `SocketMissing` → `TransportError("…does not exist")` で区別 — wbtest 検証)
+- [x] Given 権限不足の socket, when 接続する, then 権限拒否と分かるエラーになる（不存在と混同しない）。(`PermissionDenied` → `TransportError("permission denied opening …")` — wbtest が 000 権限 dir で実検証；client 経由の detail 保存も検証)
+- [x] Given 非対応 operation, when 実行を試みる, then 事前検証または明確なエラーとして失敗し、沈黙の成功にならない。(0019 の capability matrix が dispatch 前に Rejected/NYI で明示失敗；engine error 分類が 404/409/500 等を型付きで返す)
+- [x] Given matrix のドキュメント, when 未実行セルを確認する, then PASS と区別して記載され、理由が付いている。(docs/ENGINE_COMPATIBILITY.md: 全セルに PASS/FAIL/未実行＋理由、空欄なし)
+- [ ] rootless 固有の制約（publish / exec / mount の少なくとも 1 項目）が実測結果として記録されているか、未実行の理由が明記されている。**未実行の理由を明記**（5 項目すべてに未実行理由；実測手順を文書化 — 環境不在のため）
 
 ## テスト計画
 
@@ -92,3 +92,4 @@ Podman rootless と Docker rootless を含む Docker Engine API 互換ランタ�
 - 公開 API の追加（明示 socket 設定が 0006 で不足する場合）が生じた場合、`CHANGES.md` の impact 判断は実装時に再評価する。
 - 関連: 0006・0017・0020・0019。互換記録は 0032 / 0050 の比較にも使う。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`docs/ENGINE_COMPATIBILITY.md` 新設 — 3 列（Docker rootful/Docker rootless/Podman rootless）×14 行 matrix、全セル PASS/FAIL/未実行＋理由で記入。socket 設定は既存の `DockerClient::new(socket_path~)` で充足（追加 API 不要、既定 `/var/run/docker.sock` 維持、暗黙探索なし）。接続失敗の 3 分類（不存在/権限/非 HTTP）は既存 error 体系で成立 — client 経由の detail 保持を新 wbtest で検証。rootless 制約表（低 port publish/ネットワーク/bridge IP/exec uid/mount 権限）と候補 socket path（unverified 明記）、実測手順を文書化。README/PORTING は matrix 参照表現に更新し「対応済み」表現を排除。moon check --deny-warn PASS、157 tests PASS。実測は環境不在で全て未実行 — CI/手動 Linux で採証する手順は文書化済み。

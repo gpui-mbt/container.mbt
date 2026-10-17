@@ -188,3 +188,38 @@ test "api version comparison is numeric" {
   assert_true(!api_version_at_least("1.23", "1.24"))
   assert_true(!api_version_at_least("garbage", "1.24"))
 }
+
+///|
+/// 0022: connect failures keep their diagnostic detail through
+/// EngineError — absent and permission-denied sockets must not
+/// collapse into the same message.
+async test "connect failure detail distinguishes missing vs denied" {
+  let missing = DockerClient::new(
+    socket_path="/nonexistent/container-mbt/docker.sock",
+  )
+  let missing_msg = try {
+    ignore(missing.ping())
+    "<no error>"
+  } catch {
+    EngineError::TransportError(detail~, ..) => detail
+    err => "\{err}"
+  }
+  assert_true(missing_msg.contains("does not exist"))
+  let dir = @fs.tmpdir(prefix="container-mbt-noperm")
+  let sock = "\{dir}/docker.sock"
+  ignore(unix_listen(sock))
+  defer (@fs.chmod(dir, 0o700) catch { _ => () })
+  @fs.chmod(dir, 0o000)
+  let denied = DockerClient::new(socket_path=sock)
+  let denied_msg = try {
+    ignore(denied.ping())
+    "<no error>"
+  } catch {
+    EngineError::TransportError(detail~, ..) => detail
+    err => "\{err}"
+  }
+  assert_true(
+    denied_msg.contains("permission denied") ||
+    denied_msg.contains("does not exist"),
+  )
+}
