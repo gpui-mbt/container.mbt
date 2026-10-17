@@ -32,6 +32,8 @@ Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7a
 - Use bounded captured output; log retrieval is not a streaming substitute for the original LogConsumer.
 - `with_container(image, runtime, body)` provides scoped best-effort cleanup (5 s budget) on normal/error/cancel paths; `TESTCONTAINERS_COMMAND=keep` suppresses automatic cleanup only — explicit `rm()` stays effective. Containers started outside `with_container` still need explicit `rm()`. A `/bin/sh` EOF reaper watchdog registers Docker-runtime ids (re-verifies the `container-mbt.owned` label at reap time); it is disabled after 3 spawn failures.
 - Current CLI mode cannot claim upstream's Docker Desktop-free XPC behavior or API-level error classification.
+- **No synchronous facade** (upstream `SyncRunner`/`SyncContainer`): evaluated against `moonbitlang/async@0.22.4` and core, all three safety criteria fail — (a) no public API to run an independent event loop or `block_on` an async fn (the loop is compiler-owned under `async fn main`; `internal/event_loop` is not importable), (b) no coroutine-context detection (`internal/coroutine` is module-private), (c) no thread primitive (the runtime is single-threaded). The safe upstream construction therefore cannot be reproduced; see issue 0043 for the criterion-by-criterion record and re-evaluation triggers.
+- **Alternative:** write `async fn main` and call the async API directly — `start`/`exec`/`stop`/`rm`/`wait_ready` are all `async`. A synchronous program's top level is `async fn main`, not a sync wrapper.
 - Keep upstream revision pinned for feature comparison, and preserve attribution and license.
 
 ## Acceptance milestones

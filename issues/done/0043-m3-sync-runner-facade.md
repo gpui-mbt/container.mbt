@@ -1,9 +1,9 @@
 # [P2 / M3] SyncRunner と同期 Container 操作の安全な設計
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-10-18
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P2
 Milestone: M3
@@ -94,3 +94,36 @@ MoonBit 環境で同期 façade（SyncRunner / 同期 Container 操作）を実�
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の Start / exec / stop / rm / logs 行。
 - 証跡要件: 判定基準 (a)(b)(c) の調査結果（確認した API と成否）、実装する場合は同期 lifecycle と再入 negative fixture のログ、実装しない場合は文書の差分を残す。実機が使えない確認は「未実行」と明記する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+---
+
+## 実装記録（完了: 同期 façade は提供しない）
+
+判定基準 (a)(b)(c) を `moonbitlang/async@0.22.4` および core に対して調査した結果、**3 点すべて不成立**のため同期 façade は実装しない。
+
+| 基準 | 調査結果 | 成否 |
+|---|---|---|
+| (a) 独立した event loop を起動できるか | エントリポイントは `async fn main` のみで、loop の起動はコンパイラが担う。`internal/event_loop` は module 外から import 不可。`block_on` に相当する公開 API は存在しない。`set_external_event_loop`（`external_loop_integration`）は C 側埋め込みから MoonBit の loop を駆動する逆向き API であり、MoonBit の同期コードから async 関数を呼び出す手段ではない | 不成立 |
+| (b) async コンテキスト内呼び出しを検出できるか | `Coroutine::current_coroutine` は `internal/coroutine`（`internal/` パッケージは module 外から import 不可）にあり再 export されていない。upstream の `Handle::try_current()` 相当の API は公開 surface に存在しない | 不成立 |
+| (c) 別スレッドで実行できるか | `moonbitlang/async` は single-threaded model（event loop は epoll/kqueue/IOCP、blocking file IO のみ内部 thread pool に委譲で公開 API ではない）。core / stdlib にスレッド生成 primitive は存在しない | 不成立 |
+
+根拠（upstream との対応）: upstream の SyncRunner は (a) `tokio::Runtime` を `Weak` で保持して `block_on`、(b) `Handle::try_current()` で再入検出、(c) 検出時は別スレッドで `block_on`、という 3 部構成で安全を担保している。MoonBit では 3 つとも再現不能であり、安全な block_on 代替が組めないため「実装しない」が唯一の保守的判断（本 issue のリスク欄既定に一致）。
+
+### 再評価契機
+
+`moonbitlang/async` の更新で (a) 公開 event-loop 駆動 API、(b) coroutine context 検出 API、(c) スレッド API のいずれかが公開された場合は再評価する（0053 drift 追跡と連動）。判定基準となる upstream pin: `shiguredo/container-rs@f68ba1ff`。
+
+### 代替手段
+
+`async fn main` をトップレベルエントリとし、内部で async API を直接使用する。CLI ツール等で同期的に見せたい場合でも、MoonBit 側で同期ラッパを書くのではなく、`async fn main` 内で完結させる。embedded C から MoonBit を呼ぶ場合は `set_external_event_loop` を用いる（この場合も同期 MoonBit API ではなく、C 側が MoonBit event loop を駆動する構成）。
+
+### 受け入れ条件（実装しないブランチに沿って）
+
+- [x] 判定基準 (a)(b)(c) のそれぞれについて、確認した API と成否が記録されている。
+- [x] 実装しない場合: 非対応の理由と代替手段が docs/PORTING.md に記載されている。
+- [x] 既存 async API のシグネチャ・挙動に変更なし（コード変更なし、既存テスト回帰なし）。
+- [x] 決定結果が本 issue と docs/PORTING.md に記録され、再調査不要。
+
+### 変更履歴（確定）
+
+`CHANGES.md` impact: no（決定記録と文書更新のみ、実装なし）。
