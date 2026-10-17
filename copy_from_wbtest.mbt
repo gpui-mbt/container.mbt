@@ -237,3 +237,121 @@ fn http_200_bin(body : Bytes) -> Bytes {
   }
   Bytes::from_array(out)
 }
+
+///|
+/// 0035: names that cannot be split into name(≤100)/prefix(≤155)
+/// are rejected, as are empty names and traversal-shaped names.
+test "builder rejects unsplittable and hostile names" {
+  // tail component > 100 chars and prefix would exceed 155 → reject
+  let impossible = "p".repeat(160) + "/" + "n".repeat(101)
+  let b = TarBuilder::new()
+  let r1 = try {
+    b.append_file(impossible, mode=0, uid=0, gid=0, mtime=0, b"")
+    "ok"
+  } catch {
+    TarError::NameTooLong(_) => "too-long"
+    e => "other:\{e}"
+  }
+  assert_eq(r1, "too-long")
+  for bad in ["", "/abs/name", "a/../b", "a//b", "x\u{0}y", "a/./b", "..", "."] {
+    let bb = TarBuilder::new()
+    let r = try {
+      bb.append_file(bad, mode=0, uid=0, gid=0, mtime=0, b"")
+      "ok"
+    } catch {
+      TarError::BadName(_) => "bad-name"
+      TarError::NameTooLong(_) => "too-long"
+      TarError::TrailingSlash(_) => "slash"
+      e => "other:\{e}"
+    }
+    assert_true(r != "ok")
+  }
+}
+
+///|
+/// 0035: NUL bytes in copy targets are rejected before normalization.
+test "copy target rejects NUL" {
+  let r = try {
+    ignore(validate_copy_target("/a\u{0}/b"))
+    "ok"
+  } catch {
+    _ => "rejected"
+  }
+  assert_eq(r, "rejected")
+}
+
+///|
+/// 0035: entry count is bounded — the 4097th entry raises
+/// TooManyEntries regardless of remaining byte budget.
+test "entry count is bounded" {
+  let b = TarBuilder::new()
+  for i = 0; i < ARCHIVE_MAX_ENTRIES.to_int(); i = i + 1 {
+    b.append_file("e\{i}", mode=0, uid=0, gid=0, mtime=0, b"")
+  }
+  let r = try {
+    b.append_file("overflow", mode=0, uid=0, gid=0, mtime=0, b"")
+    "ok"
+  } catch {
+    TarError::TooManyEntries(..) => "capped"
+    e => "other:\{e}"
+  }
+  assert_eq(r, "capped")
+}
+
+///|
+/// 0035: every entry a builder emits is a root-relative path with no
+/// leading '/' and no '..' — verified by walking a real multi-entry
+/// archive built from a host directory.
+async test "all emitted entries are root-relative" {
+  let dir = @fs.tmpdir(prefix="container-mbt-sec")
+  @fs.write_file("\{dir}/top.txt", @utf8.encode("t"))
+  @fs.mkdir("\{dir}/deep/nest", permission=0o755, recursive=true)
+  @fs.write_file("\{dir}/deep/nest/leaf", @utf8.encode("l"))
+  let img = GenericImage::new("alpine", "3.20").with_copy_to(
+    "/dest/root",
+    CopyDataSource::file(dir),
+  )
+  let tar = img.build_copy_archive()
+  // walk entries: header(512) + data padded to 512 until zero block
+  let mut off = 0
+  let mut count = 0
+  while off + 512 <= tar.length() {
+    let block = tar[off:off + 512].to_owned()
+    if block[0] == b'\x00' {
+      break
+    }
+    let name = ustar_name(block)
+    assert_false(name.has_prefix("/"))
+    assert_false(name.contains(".."))
+    assert_false(name.contains("//"))
+    // sizes are octal at [124,136)
+    let mut size : Int64 = 0
+    for i = 124; i < 136; i = i + 1 {
+      let c = block[i]
+      if c >= b'0' && c <= b'7' {
+        size = size * 8 + (c.to_int() - '0'.to_int()).to_int64()
+      }
+    }
+    let data_blocks = (size + 511) / 512
+    off = (off.to_int64() + 512L + data_blocks * 512L).to_int()
+    count += 1
+  }
+  // dest/ + dest/root/ + deep/ + deep/nest/ + leaf + top.txt = 6
+  assert_eq(count, 6)
+}
+
+///|
+/// 0035: a non-zero byte stream shorter than a header is truncated
+/// input, not an empty archive.
+test "short non-zero buffer is truncated, not empty" {
+  let short = Bytes::make(300, b'x')
+  let r = try {
+    ignore(parse_first_regular_file(short))
+    "ok"
+  } catch {
+    TarReadError::BadHeader(_) => "truncated"
+    TarReadError::EmptyArchive => "empty"
+    e => "other:\{e}"
+  }
+  assert_eq(r, "truncated")
+}

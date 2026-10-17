@@ -63,7 +63,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 
 - [x] [0033 Linux archive API による with_copy_to の起動前投入](./done/0033-m3-copy-to-before-start.md) — P1 / deps: 0010, 0011
 - [x] [0034 copy_file_from でファイルを安全に取り出す](./done/0034-m3-copy-from-bounded-archive.md) — P1 / deps: 0011, 0007
-- [ ] [0035 tar 作成/展開と path traversal の安全性](./polished/0035-m3-tar-path-security.md) — P0 / deps: 0033, 0034
+- [x] [0035 tar 作成/展開と path traversal の安全性](./done/0035-m3-tar-path-security.md) — P0 / deps: 0033, 0034
 - [ ] [0036 WaitFor::http と HTTP status/header/body 条件を移植](./polished/0036-m3-http-readiness.md) — P1 / deps: 0014
 - [ ] [0037 Healthcheck builder と healthy/unhealthy wait を実装](./polished/0037-m3-healthcheck-readiness.md) — P1 / deps: 0011
 - [ ] [0038 WaitFor::exit と exec 待機条件を移植](./polished/0038-m3-exit-cmd-wait.md) — P1 / deps: 0011, 0012

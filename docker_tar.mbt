@@ -11,22 +11,33 @@
 pub const ARCHIVE_MAX_BYTES : Int64 = 67108864 // 64 MiB
 
 ///|
+/// Upper bound on archive entries. Upstream has no constant (its
+/// parser only reads the first entry and its builder writes
+/// caller-controlled entries); MoonBit bounds the count so a hostile
+/// or buggy walk cannot emit an unbounded header stream.
+pub const ARCHIVE_MAX_ENTRIES : Int64 = 4096
+
+///|
 priv suberror TarError {
   TrailingSlash(String)
   MissingTrailingSlash(String)
   NameTooLong(String)
+  BadName(String)
   TooLarge(limit~ : Int64)
+  TooManyEntries(limit~ : Int64)
 }
 
 ///|
 priv struct TarBuilder {
   data : Array[Byte]
   mut total : Int64
+  mut entries : Int64
+  emitted_dirs : Map[String, Bool]
 }
 
 ///|
 fn TarBuilder::new() -> TarBuilder {
-  { data: [], total: 0, }
+  { data: [], total: 0, entries: 0, emitted_dirs: {}, }
 }
 
 ///|
@@ -67,6 +78,42 @@ fn TarBuilder::header(
   mtime~ : Int64,
   typeflag~ : Byte,
 ) -> Unit raise {
+  self.entries += 1
+  guard self.entries <= ARCHIVE_MAX_ENTRIES else {
+    raise TooManyEntries(limit=ARCHIVE_MAX_ENTRIES)
+  }
+  // Entry names are validated as *structure* before any
+  // normalization could hide traversal: non-empty, no NUL, no
+  // leading '/', no '..' or empty components, no component that is
+  // only dots (a trailing '/' is legal only for directories, which
+  // the callers enforce via the TrailingSlash/MissingTrailingSlash
+  // guards).
+  guard name.length() > 0 else { raise BadName("empty entry name") }
+  for seg in name.split("/") {
+    guard seg != ".." else {
+      raise BadName("entry name must not contain '..': \{name}")
+    }
+  }
+  // a bare "." segment or name would be normalized away by the
+  // extractor — reject it while still visible
+  guard name != "." else { raise BadName("entry name must not be '.'") }
+  guard !name.contains("/./") else {
+    raise BadName("entry name must not contain '/./': \{name}")
+  }
+  guard !name.has_suffix("/.") && !name.has_suffix("/./") else {
+    raise BadName("entry name must not end with '.': \{name}")
+  }
+  for c in name {
+    guard c != '\u{00}' else {
+      raise BadName("entry name must not contain NUL: \{name}")
+    }
+  }
+  guard !name.has_prefix("/") else {
+    raise BadName("entry name must be relative: \{name}")
+  }
+  guard !name.contains("//") else {
+    raise BadName("entry name must not contain '//': \{name}")
+  }
   let header = FixedArray::make(512, b'\x00')
   // name/prefix split: name ≤ 100, else split at a '/' so that
   // tail ≤ 100 and head ≤ 155.
@@ -148,6 +195,11 @@ fn TarBuilder::append_directory(
   mode~ : Int64 = 0o755,
 ) -> Unit raise {
   guard name.has_suffix("/") else { raise MissingTrailingSlash(name) }
+  // repeated parent chains must not emit duplicate dir entries
+  if self.emitted_dirs.contains(name) {
+    return
+  }
+  self.emitted_dirs[name] = true
   self.header(name~, mode~, uid=0, gid=0, size=0, mtime=0, typeflag=b'5')
 }
 
@@ -266,7 +318,12 @@ fn is_zero_block(block : Bytes) -> Bool {
 /// capacity preallocation, matching upstream).
 fn parse_first_regular_file(tar : Bytes) -> Bytes raise {
   if tar.length() < 512 {
-    raise EmptyArchive
+    if tar.length() == 0 {
+      raise EmptyArchive
+    }
+    // Non-zero bytes short of a full header — truncation, not
+    // emptiness.
+    raise BadHeader("header truncated at \{tar.length()} bytes")
   }
   if tar[0] == b'\x1f' && tar[1] == b'\x8b' {
     raise GzippedArchive

@@ -61,6 +61,11 @@ fn validate_copy_target(target : String) -> String raise {
       fail("copy target must not contain '..': \{target}")
     }
   }
+  for c in target {
+    guard c != '\u{00}' else {
+      fail("copy target must not contain NUL: \{target}")
+    }
+  }
   // leading '/' removed — archive paths are relative to the put root
   target[1:].to_owned()
 }

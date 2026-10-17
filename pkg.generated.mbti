@@ -8,6 +8,8 @@ import {
 // Values
 pub const ARCHIVE_MAX_BYTES : Int64 = 67108864
 
+pub const ARCHIVE_MAX_ENTRIES : Int64 = 4096
+
 pub const CLEANUP_BUDGET_MS : Int = 5000
 
 pub const DEFAULT_DOCKER_SOCKET_PATH : String = "/var/run/docker.sock"
