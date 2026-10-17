@@ -101,8 +101,35 @@ pub fn build_run_args(
 }
 
 ///|
-pub fn build_stop_args(id : String) -> Array[String] {
-  ["stop", id]
+/// Grace normalization for `stop_with_timeout` (0041): `None` and
+/// negative values mean the 30 s default; `Some(v)` (v >= 0) is used
+/// verbatim — `0` is the immediate-kill path. We deliberately do NOT
+/// adopt upstream's macOS negative → i32::MAX conversion; a CLI
+/// adapter could block ~24 h on it.
+fn normalize_stop_grace(value : Int32?) -> Int32 {
+  match value {
+    None => 30
+    Some(v) => if v < 0 { 30 } else { v }
+  }
+}
+
+///|
+/// `docker stop -t <sec> <id>` / `container stop --time <sec> <id>`;
+/// a normalized grace of 0 switches to the kill argv (upstream
+/// `stop_with_timeout(Some(0))` → kill).
+pub fn build_stop_args(
+  runtime : Runtime,
+  id : String,
+  grace_seconds : Int32?,
+) -> Array[String] {
+  let sec = normalize_stop_grace(grace_seconds)
+  if sec == 0 {
+    return ["kill", id]
+  }
+  match runtime {
+    Docker => ["stop", "-t", sec.to_string(), id]
+    AppleContainer => ["stop", "--time", sec.to_string(), id]
+  }
 }
 
 ///|

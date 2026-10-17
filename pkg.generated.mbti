@@ -40,7 +40,7 @@ pub fn build_remove_args(Runtime, String) -> Array[String]
 
 pub fn build_run_args(Runtime, GenericImage, attempt~ : RunAttempt) -> Array[String] raise
 
-pub fn build_stop_args(String) -> Array[String]
+pub fn build_stop_args(Runtime, String, Int?) -> Array[String]
 
 pub fn capability(Adapter, Setting) -> Support
 
@@ -153,6 +153,7 @@ pub async fn Container::copy_file_from(Self, String) -> Bytes
 pub async fn Container::copy_file_to_host(Self, String, dest~ : String) -> Unit
 pub async fn Container::exec(Self, Array[String]) -> ProcessOutput
 pub async fn Container::exec_wait(Self, Array[String], wait? : CmdWaitFor, timeout_ms? : Int) -> ProcessOutput
+pub async fn Container::exit_code(Self) -> Int?
 pub async fn Container::get_bridge_ip_address(Self) -> String
 pub async fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int
 pub async fn Container::get_host_port_ipv6(Self, ContainerPort) -> Int
@@ -161,6 +162,7 @@ pub async fn Container::logs(Self) -> ProcessOutput
 pub async fn Container::rm(Self) -> Unit
 pub fn Container::runtime(Self) -> Runtime
 pub async fn Container::stop(Self) -> Unit
+pub async fn Container::stop_with_timeout(Self, Int?) -> Unit
 pub fn Container::subscribe_logs(Self, (LogFrame) -> Unit raise, buffer_limit? : Int64) -> LogSubscription raise
 pub async fn Container::wait_ready(Self, Array[WaitFor], Int) -> Unit
 

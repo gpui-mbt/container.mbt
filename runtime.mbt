@@ -510,21 +510,100 @@ async fn Container::logs_with_timeout(
 }
 
 ///|
-/// Stop an owned container without deleting it.
+/// Stop an owned container without deleting it — the 30 s default
+/// grace (upstream `stop_with_timeout(None)`).
 pub async fn Container::stop(self : Container) -> Unit {
+  self.stop_with_timeout(None)
+}
+
+///|
+/// Stop with an explicit grace period (issue 0041, upstream
+/// `stop_with_timeout`). `None`/negative → 30 s SIGTERM grace;
+/// `Some(0)` → immediate kill; positive → that many seconds.
+/// On the CLI adapter the argv switches to `kill`/`stop -t`/
+/// `stop --time`; on the direct adapter the daemon's `?t=` parameter
+/// carries it (`t=0` is already the daemon's immediate-kill path).
+/// Idempotent: stopping an already-stopped container succeeds.
+pub async fn Container::stop_with_timeout(
+  self : Container,
+  seconds : Int32?,
+) -> Unit {
   guard !self.removed else { fail("container already removed") }
   // Halt live log delivery before touching the runtime (0040,
   // upstream stop_log_delivery ordering).
   stop_log_delivery(self.id)
   if self.client is Some(client) {
-    return client.stop_container(self.id)
+    return client.stop_container(
+      self.id,
+      timeout_seconds=normalize_stop_grace(seconds),
+    )
   }
-  let result = @shell.Cmd(self.runtime.executable(), build_stop_args(self.id)).output(
-    timeout_ms=30000,
-    max_output_bytes=1048576,
-  )
+  let grace = normalize_stop_grace(seconds)
+  // The CLI blocks for the grace window itself; give it the grace
+  // plus a 30 s margin (upstream's transport-wait separation).
+  let result = @shell.Cmd(
+    self.runtime.executable(),
+    build_stop_args(self.runtime, self.id, seconds),
+  ).output(timeout_ms=grace * 1000 + 30000, max_output_bytes=1048576)
   guard result.exit_code() == 0 else {
     fail("container stop failed (exit \{result.exit_code()})")
+  }
+}
+
+///|
+/// The container's most recent exit code (0041, upstream
+/// `exit_code`). Always a FRESH inspect — never the cached
+/// `inspect_obj` — because the daemon settles `State.ExitCode`
+/// asynchronously right after stop. Polls at 100 ms while the
+/// container is still `Running`, for up to 5 s; returns `None` when
+/// the code stays unobtainable (still running, or the engine did not
+/// record one).
+pub async fn Container::exit_code(self : Container) -> Int32? {
+  let deadline = @async.now() + 5000L
+  while true {
+    if self.client is Some(client) {
+      let inspect = try client.inspect_container(self.id) catch {
+        EngineError::ContainerNotFound(..) => return None
+        err => raise err
+      } noraise {
+        i => i
+      }
+      if !inspect.running {
+        return inspect.exit_code
+      }
+    } else {
+      let result = @shell.Cmd(
+        self.runtime.executable(),
+        build_inspect_args(self.id),
+      ).output(timeout_ms=15000, max_output_bytes=16777216)
+      guard result.exit_code() == 0 else { return None }
+      let obj = match @json.parse(result.stdout()) {
+        Array([first, ..]) => first
+        other => other
+      }
+      match obj {
+        Object(m) =>
+          match m.get("State") {
+            Some(Object(st)) =>
+              if st.get("Running") is Some(True) {
+                ()
+              } else {
+                return match st.get("ExitCode") {
+                  Some(Number(n, ..)) => Some(n.to_int())
+                  _ => None
+                }
+              }
+            _ => return None
+          }
+        _ => return None
+      }
+    }
+    if @async.now() >= deadline {
+      return None
+    }
+    @async.sleep(100)
+  } nobreak {
+    None
   }
 }
 

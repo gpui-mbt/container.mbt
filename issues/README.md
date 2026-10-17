@@ -69,7 +69,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0038 WaitFor::exit と exec 待機条件を移植](./done/0038-m3-exit-cmd-wait.md) — P1 / deps: 0011, 0012
 - [x] [0039 環境変数待ちと複数 ready conditions の意味論](./done/0039-m3-advanced-readiness.md) — P2 / deps: 0036, 0037, 0038
 - [x] [0040 LogConsumer 継続配信と backpressure を実装](./done/0040-m3-log-consumer-backpressure.md) — P1 / deps: 0013
-- [ ] [0041 stop_with_timeout と exit code 語義を揃える](./polished/0041-m3-graceful-stop-exit-code.md) — P1 / deps: 0011, 0027
+- [x] [0041 stop_with_timeout と exit code 語義を揃える](./done/0041-m3-graceful-stop-exit-code.md) — P1 / deps: 0011, 0027
 - [ ] [0042 所有 container の Drop/keep/watchdog cleanup 契約](./polished/0042-m3-drop-keep-watchdog.md) — P0 / deps: 0021, 0032
 - [ ] [0043 SyncRunner と同期 Container 操作の安全な設計](./polished/0043-m3-sync-runner-facade.md) — P2 / deps: 0011
 - [ ] [0044 tmpfs size/mode・volume/read-only/bind の詳細互換](./polished/0044-m3-advanced-mounts.md) — P1 / deps: 0010, 0026
