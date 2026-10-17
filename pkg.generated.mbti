@@ -36,6 +36,8 @@ pub fn build_exec_args(String, Array[String]) -> Array[String]
 
 pub fn build_inspect_args(String) -> Array[String]
 
+pub fn build_network_inspect_args(Runtime, String) -> Array[String]
+
 pub fn build_remove_args(Runtime, String) -> Array[String]
 
 pub fn build_run_args(Runtime, GenericImage, attempt~ : RunAttempt) -> Array[String] raise
@@ -247,6 +249,7 @@ pub async fn DockerClient::get_host_port_ipv6(Self, String, ContainerPort, deadl
 pub async fn DockerClient::inspect_container(Self, String, deadline? : Deadline) -> ContainerInspect
 pub async fn DockerClient::list_owned_containers(Self, deadline? : Deadline) -> Array[ListedContainer]
 pub async fn DockerClient::logs(Self, String, tail? : String, body_limit? : Int, deadline? : Deadline) -> DockerLogs
+pub async fn DockerClient::network_exists(Self, String, deadline? : Deadline) -> Bool
 pub fn DockerClient::new(socket_path? : String, connect_timeout_ms? : Int) -> Self
 pub async fn DockerClient::ping(Self, deadline? : Deadline) -> Unit
 pub async fn DockerClient::preflight(Self, min_api? : String, deadline? : Deadline) -> DaemonVersion
@@ -295,6 +298,11 @@ pub fn EngineOp::archive() -> Self
 pub fn EngineOp::container_lifecycle() -> Self
 pub fn EngineOp::resolve_image() -> Self
 
+pub enum ExtraHost {
+  Addr(String)
+  HostGateway
+}
+
 pub struct GenericImage {
   name : String
   tag : String
@@ -311,6 +319,8 @@ pub struct GenericImage {
   mut working_dir : String?
   mut user : String?
   mut network : String?
+  mut hostname : String?
+  extra_hosts : Array[(String, ExtraHost)]
   mut platform : String?
   mut readonly_rootfs : Bool
   copy_to : Array[CopyTarget]
@@ -331,6 +341,10 @@ pub fn GenericImage::with_entrypoint(Self, String) -> Self
 pub fn GenericImage::with_env_var(Self, String, String) -> Self
 pub fn GenericImage::with_exposed_port(Self, ContainerPort) -> Self raise
 pub fn GenericImage::with_healthcheck(Self, Healthcheck) -> Self
+pub fn GenericImage::with_host(Self, String, ExtraHost) -> Self raise
+pub fn GenericImage::with_host_addr(Self, String, String) -> Self raise
+pub fn GenericImage::with_host_gateway(Self, String) -> Self raise
+pub fn GenericImage::with_hostname(Self, String) -> Self raise
 pub fn GenericImage::with_label(Self, String, String) -> Self
 pub fn GenericImage::with_mapped_port(Self, Int, ContainerPort) -> Self raise
 pub fn GenericImage::with_mount(Self, Mount) -> Self
@@ -514,6 +528,8 @@ pub enum Setting {
   StartupTimeout
   CopyTo
   TmpfsOptions
+  Hostname
+  ExtraHosts
 }
 
 pub enum Support {

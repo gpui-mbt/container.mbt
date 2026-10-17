@@ -327,8 +327,9 @@ pub async fn GenericImage::start_with_client(
   client : DockerClient,
 ) -> Container {
   preflight(DirectDocker, self)
-  ensure_bind_sources_exist(self)
   let deadline = Deadline::after(self.startup_timeout_ms)
+  ensure_bind_sources_exist(self)
+  ensure_network_exists(self, Some(client), None, deadline~)
   ignore(ensure_owner_lock())
   let attempt = RunAttempt::prepare(self)
   // Same identity contract as the CLI adapter: the attempt name and the
@@ -383,6 +384,34 @@ pub async fn GenericImage::start_with_client(
 }
 
 ///|
+/// 0045: a named network must already exist — we never auto-create it.
+/// One inspect request/spawn, bounded by the startup deadline; missing
+/// networks fail before the container is created.
+async fn ensure_network_exists(
+  image : GenericImage,
+  client : DockerClient?,
+  runtime : Runtime?,
+  deadline? : Deadline,
+) -> Unit {
+  guard image.network is Some(name) else { return }
+  let found = match client {
+    Some(c) => c.network_exists(name, deadline?)
+    None => {
+      let rt = match runtime {
+        Some(r) => r
+        None => fail("ensure_network_exists: no runtime")
+      }
+      let result = @shell.Cmd(
+        rt.executable(),
+        build_network_inspect_args(rt, name),
+      ).output(timeout_ms=5000, max_output_bytes=65536)
+      result.exit_code() == 0
+    }
+  }
+  guard found else { fail("network does not exist: \{name}") }
+}
+
+///|
 /// 0044: bind sources must exist on the host before the first side
 /// effect. Both adapters talk to a local daemon (Unix socket / local
 /// CLI), so a host-local check is sound; a future remote-daemon adapter
@@ -407,6 +436,12 @@ async fn GenericImage::start_via_cli(
   let attempt = RunAttempt::prepare(self)
   let args = build_run_args(runtime, self, attempt~)
   ensure_bind_sources_exist(self)
+  ensure_network_exists(
+    self,
+    None,
+    Some(runtime),
+    deadline=Deadline::at(deadline),
+  )
   if attempt.user_named() &&
     name_in_use_via(runtime.executable(), attempt.name()) {
     fail("container name is already in use: \{attempt.name()}")

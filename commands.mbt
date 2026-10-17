@@ -56,6 +56,18 @@ pub fn build_run_args(
     args.push("--network")
     args.push(network)
   }
+  if image.hostname is Some(hostname) {
+    args.push("--hostname")
+    args.push(hostname)
+  }
+  for (key, host) in image.extra_hosts {
+    let value = match host {
+      Addr(addr) => addr
+      HostGateway => "host-gateway"
+    }
+    args.push("--add-host")
+    args.push("\{key}:\{value}")
+  }
   if image.platform is Some(platform) {
     args.push("--platform")
     args.push(platform)
@@ -122,6 +134,19 @@ fn octal_string(value : Int32) -> String {
   }
   digits.rev_in_place()
   String::from_array(digits)
+}
+
+///|
+/// `<runtime> network inspect <name>` — the 0045 existence preflight.
+/// Docker and Apple CLIs share the subcommand shape; Apple never reaches
+/// this because `Network` is rejected there.
+pub fn build_network_inspect_args(
+  runtime : Runtime,
+  name : String,
+) -> Array[String] {
+  match runtime {
+    Docker | AppleContainer => ["network", "inspect", name]
+  }
 }
 
 ///|

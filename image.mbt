@@ -258,6 +258,15 @@ pub fn WaitFor::message_on_either_std(message : String) -> WaitFor {
 }
 
 ///|
+/// Extra /etc/hosts entry target (upstream `ExtraHost`, 0045).
+/// `Addr` carries an IPv4/IPv6 literal; `HostGateway` serializes to
+/// Docker's `host-gateway` special value.
+pub enum ExtraHost {
+  Addr(String)
+  HostGateway
+}
+
+///|
 /// A compact, MoonBit-owned equivalent of GenericImage and ContainerRequest.
 pub struct GenericImage {
   name : String
@@ -275,6 +284,8 @@ pub struct GenericImage {
   mut working_dir : String?
   mut user : String?
   mut network : String?
+  mut hostname : String?
+  extra_hosts : Array[(String, ExtraHost)]
   mut platform : String?
   mut readonly_rootfs : Bool
   copy_to : Array[CopyTarget]
@@ -301,6 +312,8 @@ pub fn GenericImage::new(name : String, tag : String) -> GenericImage raise {
     working_dir: None,
     user: None,
     network: None,
+    hostname: None,
+    extra_hosts: [],
     platform: None,
     readonly_rootfs: false,
     copy_to: [],
@@ -447,6 +460,68 @@ pub fn GenericImage::with_network(
 ) -> GenericImage {
   self.network = Some(name)
   self
+}
+
+///|
+/// Explicit container hostname (upstream `with_hostname`, 0045). There
+/// is deliberately no container-name/ID fallback here — upstream falls
+/// back through `networks[0].options.hostname` on Apple, but emitting
+/// `--hostname` unconditionally would change existing containers'
+/// visible identity, so only an explicit name is sent.
+pub fn GenericImage::with_hostname(
+  self : GenericImage,
+  name : String,
+) -> GenericImage raise {
+  guard name != "" &&
+    !name.iter().any(fn(c) { c is ' ' || c is '\n' || c is '\t' }) else {
+    fail("invalid hostname: \{name}")
+  }
+  self.hostname = Some(name)
+  self
+}
+
+///|
+/// Extra /etc/hosts entry (upstream `with_host`, 0045). The key must be
+/// a bare hostname (no whitespace/colon — `:` is the wire delimiter,
+/// so keys must not contain it even though IPv6 values do). `Addr`
+/// values are checked only for emptiness/whitespace: core has no IP
+/// parser, and rejecting colons would break IPv6.
+pub fn GenericImage::with_host(
+  self : GenericImage,
+  key : String,
+  host : ExtraHost,
+) -> GenericImage raise {
+  guard key != "" &&
+    !key.iter().any(fn(c) { c is ' ' || c is '\n' || c is '\t' || c == ':' }) else {
+    fail("invalid extra-host key: \{key}")
+  }
+  if host is Addr(addr) {
+    guard addr != "" &&
+      !addr.iter().any(fn(c) { c is ' ' || c is '\n' || c is '\t' }) else {
+      fail("invalid extra-host address: \{addr}")
+    }
+  }
+  self.extra_hosts.push((key, host))
+  self
+}
+
+///|
+/// Convenience for `with_host(key, ExtraHost::Addr(addr))` (0045).
+pub fn GenericImage::with_host_addr(
+  self : GenericImage,
+  key : String,
+  addr : String,
+) -> GenericImage raise {
+  self.with_host(key, Addr(addr))
+}
+
+///|
+/// Convenience for `with_host(key, ExtraHost::HostGateway)` (0045).
+pub fn GenericImage::with_host_gateway(
+  self : GenericImage,
+  key : String,
+) -> GenericImage raise {
+  self.with_host(key, HostGateway)
 }
 
 ///|

@@ -108,6 +108,9 @@ priv struct CreateRequest {
   binds : Array[String]
   mounts : Array[String]
   healthcheck : String?
+  hostname : String?
+  /// `host:ip` strings for `HostConfig.ExtraHosts` (0045).
+  extra_hosts : Array[String]
 }
 
 ///|
@@ -126,6 +129,14 @@ fn create_request(image : GenericImage) -> CreateRequest raise {
   }
   let binds : Array[String] = []
   let mounts : Array[String] = []
+  let extra_hosts : Array[String] = []
+  for (key, host) in image.extra_hosts {
+    let value = match host {
+      Addr(addr) => addr
+      HostGateway => "host-gateway"
+    }
+    extra_hosts.push("\{key}:\{value}")
+  }
   for m in image.mounts {
     match m {
       Bind(src, dst, ro) =>
@@ -170,6 +181,8 @@ fn create_request(image : GenericImage) -> CreateRequest raise {
     working_dir: image.working_dir,
     user: image.user,
     network: image.network,
+    hostname: image.hostname,
+    extra_hosts,
     readonly_rootfs: image.readonly_rootfs,
     exposed,
     bindings,
@@ -213,6 +226,10 @@ fn CreateRequest::to_json(self : CreateRequest) -> String {
     buf.write_string(",\"User\":")
     buf.write_string(escape_json(u))
   }
+  if self.hostname is Some(h) {
+    buf.write_string(",\"Hostname\":")
+    buf.write_string(escape_json(h))
+  }
   if self.exposed.length() > 0 {
     buf.write_string(",\"ExposedPorts\":{")
     for i = 0; i < self.exposed.length(); i = i + 1 {
@@ -254,6 +271,10 @@ fn CreateRequest::to_json(self : CreateRequest) -> String {
       )
     }
     buf.write_char('}')
+  }
+  if self.extra_hosts.length() > 0 {
+    buf.write_string(",\"ExtraHosts\":")
+    buf.write_string(json_array(self.extra_hosts))
   }
   if self.mounts.length() > 0 {
     buf.write_string(",\"Mounts\":[")
@@ -708,4 +729,31 @@ pub async fn DockerClient::copy_file_from(
     deadline?,
   )
   parse_first_regular_file(resp.body)
+}
+
+///|
+/// `GET /networks/{name}` — 0045 network existence preflight. 404 maps
+/// to `false`; every other error propagates. Exactly one request — the
+/// check never creates the network.
+pub async fn DockerClient::network_exists(
+  self : DockerClient,
+  name : String,
+  deadline? : Deadline,
+) -> Bool {
+  try {
+    ignore(
+      self.request(
+        verb="GET",
+        path="/networks/\{name}",
+        op="network inspect",
+        deadline?,
+      ),
+    )
+    true
+  } catch {
+    // The lifecycle context classifies a 404 as ContainerNotFound; for a
+    // networks query that same status means "network absent".
+    EngineError::ContainerNotFound(..) => false
+    e => raise e
+  }
 }

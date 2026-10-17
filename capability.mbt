@@ -44,6 +44,10 @@ pub enum Setting {
   CopyTo
   /// 0044: tmpfs size/mode mount options.
   TmpfsOptions
+  /// 0045: explicit --hostname.
+  Hostname
+  /// 0045: --add-host / HostConfig.ExtraHosts entries.
+  ExtraHosts
 }
 
 ///|
@@ -72,6 +76,8 @@ fn Setting::name(self : Setting) -> String {
     StartupTimeout => "startup timeout"
     CopyTo => "copy-to"
     TmpfsOptions => "tmpfs options"
+    Hostname => "hostname"
+    ExtraHosts => "extra host"
   }
 }
 
@@ -127,7 +133,9 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | ReadonlyRootfs
         | StartupTimeout
         | CopyTo
-        | TmpfsOptions => Supported
+        | TmpfsOptions
+        | Hostname
+        | ExtraHosts => Supported
       }
     CliDocker =>
       match setting {
@@ -153,7 +161,9 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | Platform
         | ReadonlyRootfs
         | StartupTimeout
-        | TmpfsOptions => Supported
+        | TmpfsOptions
+        | Hostname
+        | ExtraHosts => Supported
       }
     CliApple =>
       match setting {
@@ -179,6 +189,12 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
           Rejected(
             "tmpfs size/mode is not supported by the Apple container CLI",
           )
+        // `container run` documents no --hostname/--add-host flags; the
+        // upstream /etc/hosts exec fallback is XPC-only by design (0045).
+        Hostname =>
+          Rejected("--hostname is not supported by the Apple container CLI")
+        ExtraHosts =>
+          Rejected("--add-host is not supported by the Apple container CLI")
         Command
         | Entrypoint
         | ContainerName
@@ -223,6 +239,12 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
         used.push(SctpPort)
       }
     }
+  }
+  if image.hostname is Some(_) {
+    used.push(Hostname)
+  }
+  if image.extra_hosts.length() > 0 {
+    used.push(ExtraHosts)
   }
   if image.mounts.length() > 0 {
     used.push(Mounts)
@@ -358,6 +380,12 @@ fn validate_image_request(image : GenericImage) -> Unit raise {
   }
   for (key, _) in image.labels {
     guard key != "" && !key.contains("=") else { fail("invalid label key") }
+  }
+  if image.network is Some(name) {
+    guard name != "" &&
+      !name.iter().any(fn(c) { c is ' ' || c is '\n' || c is '\t' }) else {
+      fail("invalid network name")
+    }
   }
   for mount in image.mounts {
     let (kind, source, destination) = match mount {

@@ -1,6 +1,6 @@
 # [P1 / M3] hostname・ExtraHost・network を API と実行経路に追加
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -55,13 +55,21 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given `with_hostname("myhost")`, when Docker で run する, then コンテナ内 hostname が `myhost` になる。
-- [ ] Given `with_host("db", ExtraHost::Addr("10.0.0.5"))`, when Docker で run する, then コンテナ内 `/etc/hosts` に `10.0.0.5 db` が入る。
-- [ ] Given `ExtraHost::HostGateway`, when Docker かつ host gateway 対応環境で run する, then `host-gateway` が `--add-host` に渡り、ホスト到達を確認できる。非対応環境では明示エラーになる。
-- [ ] Given 存在しない network 名, when run する, then 副作用前に明示エラーになり、コンテナは作成されない。network は自動作成されない。
-- [ ] Given Apple CLI で未対応の設定（hostname / add-host / host gateway）, when run する, then 副作用前に明示エラーになる。
-- [ ] Given 既存の `with_network` 利用箇所, when 再実行する, then `--network` の引数に回帰がない。
-- [ ] hostname 未指定時の組み立てが既存と同一である（後方互換）。
+- [ ] Given `with_hostname("myhost")`, when Docker で run する, then コンテナ内 hostname が `myhost` になる。→ 引数組み立ては wbtest で確認。**実機反映は未実行**（daemon 非搭載。CI Docker ジョブで受入）。
+- [ ] Given `with_host("db", ExtraHost::Addr("10.0.0.5"))`, when Docker で run する, then コンテナ内 `/etc/hosts` に `10.0.0.5 db` が入る。→ `--add-host db:10.0.0.5` 組み立ては wbtest で確認。**実機 /etc/hosts 検証は未実行**。
+- [ ] Given `ExtraHost::HostGateway`, when Docker かつ host gateway 対応環境で run する, then `host-gateway` が `--add-host` に渡り、ホスト到達を確認できる。→ `host-gateway` 文字列の emit は wbtest で確認。**ホスト到達の実機検証は未実行**（バージョン依存、0022 に記録済み方針）。
+- [x] Given 存在しない network 名, when run する, then 副作用前に明示エラーになり、コンテナは作成されない。network は自動作成されない。→ `ensure_network_exists` が direct（`GET /networks/{name}`）と CLI（`network inspect`）の両経路で副作用前に 1 回だけ確認。404/非零終了 → `network does not exist`。mock socket で検証。
+- [x] Given Apple CLI で未対応の設定（hostname / add-host / host gateway）, when run する, then 副作用前に明示エラーになる。→ `Setting::Hostname`/`Setting::ExtraHosts` を追加し CliApple は Rejected。
+- [x] Given 既存の `with_network` 利用箇所, when 再実行する, then `--network` の引数に回帰がない。→ 全既存テスト無変更で通過。
+- [x] hostname 未指定時の組み立てが既存と同一である（後方互換）。→ wbtest で `--hostname`/`--add-host` 非含有を確認。
+
+## 実装メモ
+
+- `ExtraHost`（`Addr(String)`/`HostGateway`）、`with_hostname`/`with_host`/`with_host_addr`/`with_host_gateway` を追加。Addr の値は空・空白のみ拒否（core に IP parser なし、コロンは IPv6 のため許容 — 簡易検証であることを記録）。
+- hostname フォールバック（明示 → container_name → ID）は**採用しない**: 未指定時に `--hostname` を出すと既存コンテナの hostname が変わるため。明示指定のみ `--hostname`/`"Hostname"` を emit。upstream との差異として記録。
+- direct 経路は `Hostname` トップレベル + `HostConfig.ExtraHosts`（`key:value` 文字列、`HostGateway` → `host-gateway`）。CLI 経路は `--hostname` / `--add-host`。
+- `network_exists` は `GET /networks/{name}` の 404 を `false` に写像（context は container_lifecycle を流用し ContainerNotFound→false）。CLI 経路は `build_network_inspect_args` で `<runtime> network inspect <name>`、5 s timeout。
+- `with_network` の名前は空・空白・改行を `validate_image_request` で拒否。
 
 ## テスト計画
 
