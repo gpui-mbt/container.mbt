@@ -72,7 +72,7 @@ pub fn build_run_args(
     args.push("\{key}=\{value}")
   }
   args.push("--label")
-  args.push("\{OWNERSHIP_LABEL}=\{attempt.run_id()}")
+  args.push("\{OWNERSHIP_LABEL}=\{attempt.owner_id()}")
   for mapping in image.mappings {
     args.push("--publish")
     args.push(mapping.as_publish_argument())

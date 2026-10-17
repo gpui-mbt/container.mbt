@@ -1,6 +1,6 @@
 ///|
 fn fixture_attempt(name : String, run_id : String) -> RunAttempt {
-  { name, run_id, user_named: true, }
+  { name, run_id, user_named: true, owner_id: "p1-t0000000000000001", }
 }
 
 ///|

@@ -16,8 +16,9 @@ test "generated run ids are unique 32-char hex strings" {
 ///|
 /// 0001: a caller that never names its container still gets a valid,
 /// discoverable name so cleanup can find the container after a failed run.
-test "unnamed attempts get a valid generated container name" {
+async test "unnamed attempts get a valid generated container name" {
   let image = GenericImage::new("alpine", "3.20")
+  ignore(ensure_owner_lock())
   let attempt = RunAttempt::prepare(image)
   assert_true(!attempt.user_named())
   assert_true(attempt.name().has_prefix("container-mbt-"))
@@ -31,7 +32,8 @@ test "unnamed attempts get a valid generated container name" {
 
 ///|
 /// 0001: invalid user-specified names fail before any argument building.
-test "invalid container names are rejected during attempt preparation" {
+async test "invalid container names are rejected during attempt preparation" {
+  ignore(ensure_owner_lock())
   let image = GenericImage::new("alpine", "3.20").with_container_name("-bad")
   assert_true(
     try {
@@ -50,11 +52,14 @@ test "ownership label is attached to every run" {
     name: "named",
     run_id: "run-42",
     user_named: true,
+    owner_id: "p1-t0000000000000001",
   }
   let image = GenericImage::new("alpine", "3.20")
   let args = build_run_args(Docker, image, attempt~)
   assert_true(args.join(" ").contains("--name named"))
-  assert_true(args.join(" ").contains("--label container-mbt.owned=run-42"))
+  assert_true(
+    args.join(" ").contains("--label container-mbt.owned=p1-t0000000000000001"),
+  )
 }
 
 ///|
@@ -72,6 +77,7 @@ async test "cleanup never removes a container lacking the ownership label" {
     name: "foreign",
     run_id: "rid-mine",
     user_named: true,
+    owner_id: "p1-t0000000000000001",
   }
   let note = collect_attempt("/bin/true", Docker, attempt, 800)
   assert_true(note.contains("left untouched"))
@@ -85,6 +91,7 @@ async test "cleanup reports an absent container without spawning removal" {
     name: "never-created",
     run_id: "rid-mine",
     user_named: false,
+    owner_id: "p1-t0000000000000001",
   }
   let note = collect_attempt("/bin/false", Docker, attempt, 700)
   assert_true(note.contains("no owned container"))
@@ -101,11 +108,12 @@ async test "cleanup removes only the label-owned container" {
     name: "owned-one",
     run_id: "rid-owned",
     user_named: false,
+    owner_id: "p1-t0000000000000001",
   }
   let script = "\{dir}/fake-runtime"
   @fs.write_file(
     script,
-    "#!/bin/sh\ncase \"$1\" in\n  inspect) printf '%s' '{\"Config\":{\"Labels\":{\"container-mbt.owned\":\"rid-owned\"}}}' ;;\n  rm|delete) : > \"\{marker}\" ;;\n  *) exit 1 ;;\nesac\n",
+    "#!/bin/sh\ncase \"$1\" in\n  inspect) printf '%s' '{\"Config\":{\"Labels\":{\"container-mbt.owned\":\"p1-t0000000000000001\"}}}' ;;\n  rm|delete) : > \"\{marker}\" ;;\n  *) exit 1 ;;\nesac\n",
     permission=0o755,
   )
   let note = collect_attempt(script, Docker, owned, 2000)
@@ -116,6 +124,7 @@ async test "cleanup removes only the label-owned container" {
     name: "foreign-one",
     run_id: "rid-foreign",
     user_named: true,
+    owner_id: "p1-t0000000000000001",
   }
   let foreign_script = "\{dir}/foreign-runtime"
   @fs.write_file(
@@ -138,6 +147,7 @@ async test "cleanup budget is independent of any expired startup deadline" {
     name: "deadline-expired",
     run_id: "rid-expired",
     user_named: false,
+    owner_id: "p1-t0000000000000001",
   }
   let start = @async.now()
   let note = collect_attempt("/bin/true", Docker, attempt, 300)

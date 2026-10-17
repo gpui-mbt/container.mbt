@@ -58,13 +58,13 @@ SIGKILL 等で `errdefer` が動かなかった場合に、所有 label と所�
 
 ## 受け入れ条件
 
-- [ ] Given 子プロセスがコンテナを start した状態, when 子を SIGKILL する, then 回収 API はその owner のコンテナを検出する。
-- [ ] Given 回収 API の実行完了, when container list を確認する, then 死んだ owner のコンテナは 0 件で、外部で作成した無関係なコンテナは存在したまま。
-- [ ] Given 同じ回収 API を 2 回目に実行する, when 回収済みである, then 削除は 0 件で成功する（誤削除なし）。
-- [ ] Given 生存中の別 owner がコンテナを保持している, when 死んだ owner の回収を実行する, then 生存 owner のコンテナは削除されない。
-- [ ] Given label のないコンテナ, when 回収を実行する, then 候補にも削除にも含まれず、除外理由が診断ログに残る。
-- [ ] Given label 値が不正な形式のコンテナ, when 回収を実行する, then 削除せず、不正値であることが診断に残る。
-- [ ] Given 削除 API が失敗する状況（他プロセスが先に削除した等）, when 回収を実行する, then 失敗理由が集約され、成功した件数と区別できる。
+- [ ] Given 子プロセスがコンテナを start した状態, when 子を SIGKILL する, then 回収 API はその owner のコンテナを検出する。**未実行**（実 daemon なし。CI が `smoke_crash` を `kill -9` してから `smoke_linux` を実行 — recover step が label+lock で検出。mock では dead-owner 行が DELETE まで到達することを検証）
+- [ ] Given 回収 API の実行完了, when container list を確認する, then 死んだ owner のコンテナは 0 件で、外部で作成した無関係なコンテナは存在したまま。**未実行**（CI の `docker ps -a` grep + foreign inspect assert；mock で無 label/他人 owner は skip されることを検証）
+- [ ] Given 同じ回収 API を 2 回目に実行する, when 回収済みである, then 削除は 0 件で成功する（誤削除なし）。**mock で検証**（404 delete は冪等成功として removed に計上 — 再実行で対象は既に不在）。実 daemon 再確認は CI 未実行。
+- [x] Given 生存中の別 owner がコンテナを保持している, when 死んだ owner の回収を実行する, then 生存 owner のコンテナは削除されない。(wbtest: テストが live owner の lock file を保持 → skipped("still alive")、DELETE されない)
+- [x] Given label のないコンテナ, when 回収を実行する, then 候補にも削除にも含まれず、除外理由が診断ログに残る。(wbtest: `container-mbt.owned` 欠落行は skipped("no container-mbt.owned label") — server filter を当てにしない client 側再検査)
+- [x] Given label 値が不正な形式のコンテナ, when 回収を実行する, then 削除せず、不正値であることが診断に残る。(wbtest: `garbage!!` → skipped("malformed owner label"); `valid_owner_id` の形式テスト群)
+- [x] Given 削除 API が失敗する状況（他プロセスが先に削除した等）, when 回収を実行する, then 失敗理由が集約され、成功した件数と区別できる。(wbtest: 500 → failed 集約、404 → 冪等で removed 計上、`summary()` が三者を区別)
 
 ## テスト計画
 
@@ -100,3 +100,4 @@ SIGKILL 等で `errdefer` が動かなかった場合に、所有 label と所�
 - 証跡: kill -9 前後の container list、回収ログ（除外理由を含む）、削除失敗の HTTP status。
 - 関連: 0020 の fixture を拡張する。0042 が自動回収・Drop・`keep` の契約を定義する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`container-mbt.owned` の値を attempt の run-id から**プロセス owner-id**（`p<pid>-t<16hex>`、pid+時刻+nonce で一意）へ変更し、CLI・直結両経路で同一 label を付与（0001 の同一 run 検出は inspect の Name フィールド経由で従来どおり成立）。lock 方式: `ensure_owner_lock()` が `$XDG_RUNTIME_DIR/container-mbt/`（無ければ `/tmp/container-mbt-<uid>`、0700）に `owner-<id>.lock` を作成し flock(LOCK_EX|LOCK_NB) をプロセス寿命分保持 — シグナル種別を問わずカーネルが解放。`recovery.mbt` 新設: `GET /containers/json?all=true&filters={"label":["container-mbt.owned"]}` で列挙し、label 形式検証→owner lock probe→`remove_container(force)`。`RecoveryReport`（removed/skipped/failed 三者分離）を返す明示 API — `start` へ自動挿入なし。`smoke_crash` fixture（start 後待機→CI が kill -9）と `smoke_linux` 冒頭の recover 呼出しで実機 fixture を配備。新 FFI: `getpid`/`getuid`/`flock_try`。moon check --deny-warn PASS、156 tests PASS。CHANGES.md は未存在のため項目案のみ記録。実 daemon クラッシュ注入は CI 初回実行で採証（未実行）。

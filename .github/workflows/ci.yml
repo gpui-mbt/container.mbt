@@ -36,6 +36,15 @@ jobs:
           docker ps -a | tee /tmp/ps-before.txt
           moon build --target native
           BIN="$(pwd)/_build/native/debug/build/smoke_linux/smoke_linux.exe"
+          CRASHBIN="$(pwd)/_build/native/debug/build/smoke_crash/smoke_crash.exe"
+          # Crash injection (0021): a child process starts an owned
+          # container and is SIGKILLed; smoke_linux's recovery step must
+          # collect it on the next run.
+          env -i PATH=/container-mbt-empty HOME="$HOME" "$CRASHBIN" &
+          CRASH_PID=$!
+          sleep 5
+          kill -9 $CRASH_PID
+          wait $CRASH_PID || true
           # Run the direct-API binary with a PATH that cannot resolve the
           # docker CLI: only the unix socket path is exercised.
           env -i PATH=/container-mbt-empty HOME="$HOME" "$BIN" 2>&1 | tee /tmp/e2e-run.log

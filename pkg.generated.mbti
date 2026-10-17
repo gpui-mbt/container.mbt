@@ -38,6 +38,16 @@ pub async fn detect_runtime() -> Runtime
 
 pub fn engine_error_of_failure(op~ : String, Error) -> EngineError
 
+pub async fn ensure_owner_lock() -> String
+
+pub fn process_pid() -> Int
+
+pub fn process_uid() -> Int
+
+pub fn release_lock(Int) -> Unit
+
+pub fn try_owner_lock(String) -> Int? raise
+
 pub fn unix_accept(Int) -> Int? raise
 
 pub fn unix_close_fd(Int) -> Unit raise
@@ -179,11 +189,13 @@ pub async fn DockerClient::get_bridge_ip_address(Self, String, deadline? : Deadl
 pub async fn DockerClient::get_host_port_ipv4(Self, String, ContainerPort, deadline? : Deadline) -> Int
 pub async fn DockerClient::get_host_port_ipv6(Self, String, ContainerPort, deadline? : Deadline) -> Int
 pub async fn DockerClient::inspect_container(Self, String, deadline? : Deadline) -> ContainerInspect
+pub async fn DockerClient::list_owned_containers(Self, deadline? : Deadline) -> Array[ListedContainer]
 pub async fn DockerClient::logs(Self, String, tail? : String, body_limit? : Int, deadline? : Deadline) -> DockerLogs
 pub fn DockerClient::new(socket_path? : String, connect_timeout_ms? : Int) -> Self
 pub async fn DockerClient::ping(Self, deadline? : Deadline) -> Unit
 pub async fn DockerClient::preflight(Self, min_api? : String, deadline? : Deadline) -> DaemonVersion
 pub async fn DockerClient::pull_image(Self, String, platform? : String, deadline? : Deadline) -> Unit
+pub async fn DockerClient::recover_orphaned_containers(Self, limit? : Int, lock_dir? : String, deadline? : Deadline) -> RecoveryReport
 pub async fn DockerClient::remove_container(Self, String, force? : Bool, deadline? : Deadline) -> Unit
 pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, body_limit? : Int, deadline? : Deadline) -> HttpResponse
 pub async fn DockerClient::resolve_image(Self, String, deadline? : Deadline) -> String
@@ -285,6 +297,12 @@ pub fn HttpResponseDecoder::is_complete(Self) -> Bool
 pub fn HttpResponseDecoder::new(max_body? : Int) -> Self
 pub fn HttpResponseDecoder::response(Self) -> HttpResponse raise HttpDecodeError
 
+pub struct ListedContainer {
+  id : String
+  name : String
+  owner : String?
+}
+
 pub enum Mount {
   Bind(String, String, Bool)
   Volume(String, String, Bool)
@@ -319,6 +337,13 @@ pub enum Protocol {
   Sctp
 }
 
+pub struct RecoveryReport {
+  removed : Array[String]
+  skipped : Array[(String, String)]
+  failed : Array[(String, String)]
+}
+pub fn RecoveryReport::summary(Self) -> String
+
 pub struct ResolvedPorts {
   // private fields
 }
@@ -331,8 +356,10 @@ pub struct RunAttempt {
   name : String
   run_id : String
   user_named : Bool
+  owner_id : String
 }
 pub fn RunAttempt::name(Self) -> String
+pub fn RunAttempt::owner_id(Self) -> String
 pub fn RunAttempt::prepare(GenericImage) -> Self raise
 pub fn RunAttempt::run_id(Self) -> String
 pub fn RunAttempt::user_named(Self) -> Bool

@@ -9,6 +9,8 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/file.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <moonbit.h>
 
@@ -111,4 +113,34 @@ int32_t moonbit_container_unix_close(int32_t fd) {
   } while (rc < 0 && errno == EINTR);
   if (rc < 0) return -errno;
   return 0;
+}
+
+// Process-owner liveness for orphan recovery (issue 0021). The owner
+// holds an flock() on a lock file for its whole lifetime; the kernel
+// releases it on any death, so a probe that acquires the lock proves
+// the owner is gone (no PID-reuse false positive).
+
+MOONBIT_FFI_EXPORT
+int32_t moonbit_container_getpid(void) {
+  return (int32_t)getpid();
+}
+
+MOONBIT_FFI_EXPORT
+int32_t moonbit_container_getuid(void) {
+  return (int32_t)getuid();
+}
+
+// open(path, O_RDWR|O_CREAT|O_CLOEXEC, 0600) then flock(LOCK_EX|LOCK_NB).
+// Returns the held fd (>= 0) on success — the caller keeps it open (owner)
+// or closes it (probe); returns -errno on failure.
+MOONBIT_FFI_EXPORT
+int32_t moonbit_container_flock_try(const char *path) {
+  int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+  if (fd < 0) return -errno;
+  if (flock(fd, LOCK_EX | LOCK_NB) < 0) {
+    int saved = errno;
+    close(fd);
+    return -saved;
+  }
+  return fd;
 }

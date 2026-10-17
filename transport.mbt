@@ -286,3 +286,50 @@ pub fn unix_close_fd(fd : Int32) -> Unit raise {
     raise SocketConnectError::ConnectFailed(-1, "<close>")
   }
 }
+
+///|
+extern "C" fn ffi_getpid() -> Int32 = "moonbit_container_getpid"
+
+///|
+extern "C" fn ffi_getuid() -> Int32 = "moonbit_container_getuid"
+
+///|
+#borrow(path)
+extern "C" fn ffi_flock_try(path : Bytes) -> Int32 = "moonbit_container_flock_try"
+
+///|
+/// Current process id — entropy source for the per-process owner id.
+pub fn process_pid() -> Int32 {
+  ffi_getpid()
+}
+
+///|
+/// Current process uid — used to pick a lock-dir fallback under /tmp.
+pub fn process_uid() -> Int32 {
+  ffi_getuid()
+}
+
+///|
+/// Try to take an exclusive non-blocking flock on `path`, creating the
+/// file if needed. `Some(fd)` = acquired (held while `fd` stays open);
+/// `None` = already held by a living owner. Other failures raise.
+pub fn try_owner_lock(path : String) -> Int32? raise {
+  let fd = ffi_flock_try(@utf8.encode(path))
+  if fd >= 0 {
+    return Some(fd)
+  }
+  let errno = -fd
+  // EWOULDBLOCK == EAGAIN (11) on Linux: another process holds the lock.
+  if errno == 11 {
+    return None
+  }
+  fail("flock(\{path}) failed: errno \{errno}")
+}
+
+///|
+/// Release a lock fd obtained from `try_owner_lock` — probe path only;
+/// the owning process never calls this so the kernel release stays tied
+/// to process death.
+pub fn release_lock(fd : Int32) -> Unit {
+  ignore(ffi_unix_close(fd))
+}

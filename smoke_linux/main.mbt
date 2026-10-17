@@ -24,6 +24,15 @@ async fn main {
     "daemon reachable over /var/run/docker.sock (api \{daemon.api_version})",
     t0,
   )
+  // Collect orphans left by killed runs before doing our own work
+  // (0021): only label-owned containers with a demonstrably dead owner
+  // are removed; the report is evidence, never silently swallowed.
+  let t = @async.now()
+  let recovered = client.recover_orphaned_containers()
+  step("recover-orphans", recovered.summary(), t)
+  for skip in recovered.skipped {
+    println("[e2e]   skipped \{skip.0}: \{skip.1}")
+  }
   let run_id = "\{@async.now()}"
   let name = "container-mbt-linux-e2e-\{run_id}"
   let image = @container.GenericImage::new("alpine", "3.20")

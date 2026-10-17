@@ -8,6 +8,7 @@ fn rejected(runtime : Runtime, image : GenericImage) -> String {
         name: "preflight-check",
         run_id: "preflight-run",
         user_named: true,
+        owner_id: "p1-t0000000000000001",
       }),
     )
     ""
@@ -35,6 +36,7 @@ test "Apple rejects SCTP port publication" {
     name: "sctp-ok",
     run_id: "rid",
     user_named: true,
+    owner_id: "p1-t0000000000000001",
   })
   assert_true(args.join(" ").contains("--publish 16379:80/sctp"))
 }
@@ -80,6 +82,7 @@ test "duplicate host ports are rejected on both runtimes" {
     name: "split-proto",
     run_id: "rid",
     user_named: true,
+    owner_id: "p1-t0000000000000001",
   })
   assert_true(args.join(" ").contains("15353:53/tcp"))
   assert_true(args.join(" ").contains("15353:53/udp"))
@@ -115,6 +118,7 @@ test "unverified Apple settings are refused before spawning" {
     name: "docker-apply",
     run_id: "rid",
     user_named: true,
+    owner_id: "p1-t0000000000000001",
   })
   let joined = args.join(" ")
   assert_true(joined.contains("--network bridge"))
@@ -151,12 +155,15 @@ test "accepted request keeps the smoke argv shape" {
     name: "golden",
     run_id: "golden-run",
     user_named: true,
+    owner_id: "p1-t0000000000000001",
   })
   assert_eq(args[0], "run")
   assert_eq(args[1], "--detach")
   let joined = args.join(" ")
   assert_true(joined.contains("--name golden"))
-  assert_true(joined.contains("--label container-mbt.owned=golden-run"))
+  assert_true(
+    joined.contains("--label container-mbt.owned=p1-t0000000000000001"),
+  )
   assert_true(joined.contains("--publish 18080:80/tcp"))
   assert_eq(args[args.length() - 4], "alpine:3.20")
 }

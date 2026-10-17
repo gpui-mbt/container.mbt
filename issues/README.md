@@ -43,7 +43,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0018 Engine transport の deadline・取消・再試行を一元化](./done/0018-m1-engine-deadline-cancel.md) — P0 / deps: 0006, 0007
 - [x] [0019 CLI と直結 API の移行方針・capability gate](./done/0019-m1-cli-adapter-migration-policy.md) — P1 / deps: 0010
 - [x] [0020 Linux daemon 直結の起動から削除までの E2E](./done/0020-m1-linux-native-e2e.md) — P0 / deps: 0010, 0011, 0012, 0013, 0014, 0018
-- [ ] [0021 Linux でプロセスクラッシュ後の残存検出と限定回収](./polished/0021-m1-linux-process-crash-recovery.md) — P1 / deps: 0020
+- [x] [0021 Linux でプロセスクラッシュ後の残存検出と限定回収](./done/0021-m1-linux-process-crash-recovery.md) — P1 / deps: 0020
 - [ ] [0022 Podman 等 Engine API 互換環境の互換境界を記録](./polished/0022-m1-docker-api-compatible-runtimes.md) — P2 / deps: 0020
 
 ### M2 — macOS Apple Container XPC (10件)

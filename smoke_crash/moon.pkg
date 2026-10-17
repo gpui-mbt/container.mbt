@@ -1,0 +1,8 @@
+import {
+  "gpui-mbt/container",
+  "moonbitlang/async",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+native"

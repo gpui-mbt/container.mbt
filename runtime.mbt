@@ -251,7 +251,7 @@ async fn collect_owned_container(
     }
     match probe {
       Some(output) if output.exit_code() == 0 => {
-        if !output.stdout().contains(attempt.run_id()) {
+        if !output.stdout().contains(attempt.owner_id()) {
           return "container \{attempt.name()} lacks the ownership label of this run; left untouched"
         }
         let removed : @shell.Output? = Some(
@@ -328,12 +328,13 @@ pub async fn GenericImage::start_with_client(
 ) -> Container {
   preflight(DirectDocker, self)
   let deadline = Deadline::after(self.startup_timeout_ms)
+  ignore(ensure_owner_lock())
   let attempt = RunAttempt::prepare(self)
   // Same identity contract as the CLI adapter: the attempt name and the
   // ownership label let a later run find and collect this run's leavings.
   let attempt_image = self
     .with_container_name(attempt.name())
-    .with_label(OWNERSHIP_LABEL, attempt.run_id())
+    .with_label(OWNERSHIP_LABEL, attempt.owner_id())
   ignore(client.resolve_or_pull_image(self.descriptor(), deadline~))
   let id = client.create_and_start(attempt_image, deadline~)
   let container : Container = {
@@ -361,6 +362,7 @@ async fn GenericImage::start_via_cli(
   runtime : Runtime,
 ) -> Container {
   let deadline = @async.now() + self.startup_timeout_ms.to_int64()
+  ignore(ensure_owner_lock())
   let attempt = RunAttempt::prepare(self)
   let args = build_run_args(runtime, self, attempt~)
   if attempt.user_named() &&
