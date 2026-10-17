@@ -37,7 +37,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0012 Docker exec create/start と stdout/stderr 多重化を移植](./done/0012-m1-docker-exec-attach.md) — P0 / deps: 0011, 0007
 - [x] [0013 Docker stdout/stderr の follow/attach と有界取得](./done/0013-m1-docker-log-stream.md) — P1 / deps: 0011, 0007
 - [x] [0014 Docker の動的 host port を IPv4/IPv6 inspect で解決](./done/0014-m1-dynamic-published-ports.md) — P0 / deps: 0011
-- [ ] [0015 Container bridge IP と network 情報を正規化](./polished/0015-m1-bridge-ip-inspection.md) — P1 / deps: 0011
+- [x] [0015 Container bridge IP と network 情報を正規化](./done/0015-m1-bridge-ip-inspection.md) — P1 / deps: 0011
 - [ ] [0016 Docker registry 認証と秘密情報保護](./polished/0016-m1-registry-auth-config.md) — P1 / deps: 0009
 - [x] [0017 Docker API ステータスと失敗分類を実装](./done/0017-m1-engine-http-errors.md) — P1 / deps: 0007
 - [x] [0018 Engine transport の deadline・取消・再試行を一元化](./done/0018-m1-engine-deadline-cancel.md) — P0 / deps: 0006, 0007

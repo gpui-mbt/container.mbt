@@ -7,6 +7,7 @@ async test "single readiness delay cannot exceed startup deadline" {
     mappings: [],
     removed: false,
     resolved_ports: None,
+    inspect_obj: None,
   }
   let start = @async.now()
   let timed_out = try {
@@ -28,6 +29,7 @@ async test "multiple delays respect one readiness budget" {
     mappings: [],
     removed: false,
     resolved_ports: None,
+    inspect_obj: None,
   }
   let start = @async.now()
   let timed_out = try {
@@ -49,6 +51,7 @@ async test "readiness receives the remaining run-start time" {
     mappings: [],
     removed: false,
     resolved_ports: None,
+    inspect_obj: None,
   }
   let deadline = @async.now() + 240L
   @async.sleep(150)

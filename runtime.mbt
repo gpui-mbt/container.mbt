@@ -7,6 +7,9 @@ pub struct Container {
   mut removed : Bool
   /// Lazily cached `docker inspect` port resolution for dynamic ports.
   priv mut resolved_ports : ResolvedPorts?
+  /// Lazily cached first object of `docker inspect` output — backs both
+  /// dynamic-port (0014) and bridge-IP/network (0015) resolution.
+  priv mut inspect_obj : Json?
 }
 
 ///|
@@ -71,12 +74,12 @@ pub async fn Container::get_host_port_ipv6(
 }
 
 ///|
-/// `docker inspect <id>` → `NetworkSettings.Ports`, resolved once and
-/// cached. A failed inspect raises (never an empty map masquerading as
-/// "nothing exposed").
-async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
-  if self.resolved_ports is Some(p) {
-    return p
+/// `docker inspect <id>` → first JSON object, fetched once and cached.
+/// A failed inspect raises — callers never see an empty object
+/// masquerading as "nothing configured".
+async fn Container::inspect_object(self : Container) -> Json {
+  if self.inspect_obj is Some(obj) {
+    return obj
   }
   let result = @shell.Cmd(
     self.runtime.executable(),
@@ -87,17 +90,28 @@ async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
       "container inspect failed (exit \{result.exit_code()}): \{result.stderr()}",
     )
   }
-  let json = @json.parse(result.stdout())
-  let ports = match json {
-    Array([first, ..]) =>
-      match first {
-        Object(m) =>
-          match m.get("NetworkSettings") {
-            Some(Object(ns)) =>
-              match ns.get("Ports") {
-                Some(p) => ResolvedPorts::parse(p)
-                _ => ResolvedPorts::empty()
-              }
+  let obj = match @json.parse(result.stdout()) {
+    Array([first, ..]) => first
+    other => other
+  }
+  self.inspect_obj = Some(obj)
+  obj
+}
+
+///|
+/// `docker inspect <id>` → `NetworkSettings.Ports`, resolved once and
+/// cached.
+async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
+  if self.resolved_ports is Some(p) {
+    return p
+  }
+  let obj = self.inspect_object()
+  let ports = match obj {
+    Object(m) =>
+      match m.get("NetworkSettings") {
+        Some(Object(ns)) =>
+          match ns.get("Ports") {
+            Some(p) => ResolvedPorts::parse(p)
             _ => ResolvedPorts::empty()
           }
         _ => ResolvedPorts::empty()
@@ -106,6 +120,33 @@ async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
   }
   self.resolved_ports = Some(ports)
   ports
+}
+
+///|
+/// `docker inspect <id>` → `NetworkSettings.Networks`, normalized to
+/// name → `IPAddress` (0015).
+async fn Container::inspect_networks(self : Container) -> ContainerNetworks {
+  let obj = self.inspect_object()
+  match obj {
+    Object(m) =>
+      match m.get("NetworkSettings") {
+        Some(Object(ns)) =>
+          match ns.get("Networks") {
+            Some(n) => ContainerNetworks::parse(n)
+            _ => ContainerNetworks::empty()
+          }
+        _ => ContainerNetworks::empty()
+      }
+    _ => ContainerNetworks::empty()
+  }
+}
+
+///|
+/// The container's bridge IP: `IPAddress` of the alphabetically first
+/// network (0015). Not-connected, unassigned, and unparsable are
+/// distinct errors; the CLI path wraps a failed `docker inspect`.
+pub async fn Container::get_bridge_ip_address(self : Container) -> String {
+  self.inspect_networks().bridge_ip(container_id=self.id)
 }
 
 ///|
@@ -268,6 +309,7 @@ pub async fn GenericImage::start(
     mappings: published_mappings,
     removed: false,
     resolved_ports: None,
+    inspect_obj: None,
   }
   attempt_pending.val = false
   // Why not leave a container running if readiness fails or gets cancelled.

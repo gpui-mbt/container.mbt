@@ -53,14 +53,14 @@ inspect の `NetworkSettings.Networks` を解析し、コンテナの bridge IP 
 
 ## 受け入れ条件
 
-- [ ] Given 既定 bridge network で起動したコンテナ, when bridge IP を取得する, then 検証済みの IP リテラルが返り、到達可能な場合はその IP への TCP 接続が成功する。
-- [ ] Given 同じコンテナを複数 network に接続する, when bridge IP を取得する, then キー順先頭の network が選ばれ、接続順や実行タイミングに依存せず結果が安定する。
-- [ ] Given host network モードのコンテナ, when bridge IP を取得する, then IP 未割当として明示エラーになり、空文字列や 0.0.0.0 を返さない。
-- [ ] Given network に接続していないコンテナ, when bridge IP を取得する, then 未接続であることを示すエラーになり、IP 未割当エラーと区別できる。
-- [ ] Given IPv6 アドレスを返す network fixture, when 解析する, then IPv6 リテラルとして検証され正しく返る。
-- [ ] Given 不正な IP 文字列を含む fixture, when 解析する, then panic せず明示エラーになる。
-- [ ] Given 削除済みコンテナ, when bridge IP を取得する, then container not found の分類が返る。
-- [ ] 既存の port 解決（0014）と inspect（0011）の動作が回帰しない。
+- [ ] Given 既定 bridge network で起動したコンテナ, when bridge IP を取得する, then 検証済みの IP リテラルが返り、到達可能な場合はその IP への TCP 接続が成功する。**未実行**（実 daemon 不在 → 0020/CI。mock daemon で inspect→IP 解決を検証済み、TCP 到達確認は未実行）
+- [x] Given 同じコンテナを複数 network に接続する, when bridge IP を取得する, then キー順先頭の network が選ばれ、接続順や実行タイミングに依存せず結果が安定する。(fixture で bridge/zeta/alpha の混在 + 「lex 順が MoonBit の length-first `String::compare` と異なる」ケース（"zeta" vs "bridge"）を固定)
+- [x] Given host network モードのコンテナ, when bridge IP を取得する, then IP 未割当として明示エラーになり、空文字列や 0.0.0.0 を返さない。(`IPAddress:""` → `no IP address assigned`、さらに `0.0.0.0`/`::` 等の unspecified literal も同エラーに丸める)
+- [x] Given network に接続していないコンテナ, when bridge IP を取得する, then 未接続であることを示すエラーになり、IP 未割当エラーと区別できる。(`Networks` 欠落・空・null → `not connected to any network`)
+- [x] Given IPv6 アドレスを返す network fixture, when 解析する, then IPv6 リテラルとして検証され正しく返る。(`fe80::42:1`、`::ffff:10.0.0.1` を `@socket.Addr::parse` 経由で検証)
+- [x] Given 不正な IP 文字列を含む fixture, when 解析する, then panic せず明示エラーになる。(`not-an-ip`/`999.1.1.1`/`1.2.3`/`fe80::1%eth0`/`::gggg` → `not a valid IP literal`)
+- [x] Given 削除済みコンテナ, when bridge IP を取得する, then container not found の分類が返る。(mock daemon 404 → `EngineError::ContainerNotFound` がそのまま伝播)
+- [x] 既存の port 解決（0014）と inspect（0011）の動作が回帰しない。(139 tests PASS)
 
 ## テスト計画
 
@@ -93,3 +93,4 @@ inspect の `NetworkSettings.Networks` を解析し、コンテナの bridge IP 
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の「Dynamic host port / bridge IP: Fixed host ports only」を本 issue で解消する。
 - 証跡: inspect JSON（`NetworkSettings.Networks`）、アクセサの戻り値、到達性確認の結果、作成・削除したテスト network 名を残す。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`networks.mbt` に `ContainerNetworks`（name → `IPAddress` 正規化、欠落は ""）と `bridge_ip`（lexicographic キー順で先頭選択、`String::lexical_compare` を使う — MoonBit の `Compare` は length-first で upstream の `Ord` と異なる点を文書化）を追加。IP 検証は `@socket.Addr::parse`（`ip:port` 形式のため合成 port を付与）に委譲し、`%zone`・unspecified literal（`0.0.0.0`/全ゼロ IPv6）は明示拒否。`ContainerInspect` に `networks` フィールド追加。API 経路に `DockerClient::get_bridge_ip_address`、CLI 経路に `Container::get_bridge_ip_address`（`docker inspect` の先頭オブジェクトを `inspect_obj` にキャッシュし ports/networks で共有）。moon check --deny-warn PASS、139 tests PASS。実 daemon E2E・TCP 到達確認は未実行（CI/0020）。

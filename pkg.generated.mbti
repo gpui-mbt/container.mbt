@@ -106,6 +106,7 @@ pub struct Container {
   // private fields
 }
 pub async fn Container::exec(Self, Array[String]) -> ProcessOutput
+pub async fn Container::get_bridge_ip_address(Self) -> String
 pub async fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int
 pub async fn Container::get_host_port_ipv6(Self, ContainerPort) -> Int
 pub fn Container::id(Self) -> String
@@ -120,7 +121,15 @@ pub struct ContainerInspect {
   exit_code : Int?
   env : Array[String]
   ports : ResolvedPorts
+  networks : ContainerNetworks
 }
+
+pub struct ContainerNetworks {
+  // private fields
+}
+pub fn ContainerNetworks::bridge_ip(Self, container_id~ : String) -> String raise
+pub fn ContainerNetworks::empty() -> Self
+pub fn ContainerNetworks::parse(Json) -> Self
 
 pub struct ContainerPort {
   number : Int
@@ -157,6 +166,7 @@ pub async fn DockerClient::create_and_start(Self, GenericImage, deadline? : Dead
 pub async fn DockerClient::create_container(Self, GenericImage, deadline? : Deadline) -> String
 pub async fn DockerClient::exec(Self, String, cmd~ : Array[String], env? : Array[(String, String)], deadline? : Deadline) -> DockerExecResult
 pub async fn DockerClient::follow_logs(Self, DockerLogSession, deadline? : Deadline) -> Unit
+pub async fn DockerClient::get_bridge_ip_address(Self, String, deadline? : Deadline) -> String
 pub async fn DockerClient::get_host_port_ipv4(Self, String, ContainerPort, deadline? : Deadline) -> Int
 pub async fn DockerClient::get_host_port_ipv6(Self, String, ContainerPort, deadline? : Deadline) -> Int
 pub async fn DockerClient::inspect_container(Self, String, deadline? : Deadline) -> ContainerInspect

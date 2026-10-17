@@ -344,13 +344,15 @@ const DOCKER_REMOVE_TIMEOUT_MS : Int32 = 60_000
 ///|
 /// Subset of `GET /containers/{id}/json` we act on. Shared snapshot —
 /// `ports` (issue 0014) is `NetworkSettings.Ports` resolved into
-/// IPv4/IPv6 host-port maps.
+/// IPv4/IPv6 host-port maps, `networks` (0015) is
+/// `NetworkSettings.Networks` normalized to name → `IPAddress`.
 pub struct ContainerInspect {
   running : Bool
   exit_code : Int32?
   /// `Config.Env` as `["KEY=VALUE", ...]` — used by exec env merge (0012).
   env : Array[String]
   ports : ResolvedPorts
+  networks : ContainerNetworks
 }
 
 ///|
@@ -400,15 +402,21 @@ pub async fn DockerClient::inspect_container(
               }
             }
           }
-          let ports = match m.get("NetworkSettings") {
-            Some(Object(ns)) =>
-              match ns.get("Ports") {
+          let (ports, networks) = match m.get("NetworkSettings") {
+            Some(Object(ns)) => {
+              let ports = match ns.get("Ports") {
                 Some(p) => ResolvedPorts::parse(p)
                 _ => ResolvedPorts::empty()
               }
-            _ => ResolvedPorts::empty()
+              let networks = match ns.get("Networks") {
+                Some(n) => ContainerNetworks::parse(n)
+                _ => ContainerNetworks::empty()
+              }
+              (ports, networks)
+            }
+            _ => (ResolvedPorts::empty(), ContainerNetworks::empty())
           }
-          { running, exit_code, env, ports, }
+          { running, exit_code, env, ports, networks, }
         }
         _ =>
           raise EngineError::MalformedResponse(
@@ -519,6 +527,19 @@ pub async fn DockerClient::get_host_port_ipv6(
   deadline? : Deadline,
 ) -> Int32 {
   self.inspect_container(id, deadline?).ports.ipv6(port)
+}
+
+///|
+/// The container's bridge IP: the `IPAddress` of the first network in
+/// alphabetical key order (the upstream `bridge_ip_address` rule).
+/// Not-connected, unassigned, and unparsable are distinct errors;
+/// container-not-found propagates as `ContainerNotFound` (0017).
+pub async fn DockerClient::get_bridge_ip_address(
+  self : DockerClient,
+  id : String,
+  deadline? : Deadline,
+) -> String {
+  self.inspect_container(id, deadline?).networks.bridge_ip(container_id=id)
 }
 
 ///|
