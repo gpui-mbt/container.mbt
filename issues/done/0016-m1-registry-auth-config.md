@@ -57,18 +57,18 @@ Docker の静的認証設定（`DOCKER_AUTH_CONFIG` / `DOCKER_CONFIG/config.json
 
 ## 受け入れ条件
 
-- [ ] Given `DOCKER_AUTH_CONFIG` と `DOCKER_CONFIG/config.json` と `~/.docker/config.json` が同時に存在する, when 認証を解決する, then `DOCKER_AUTH_CONFIG` の内容が優先される。
-- [ ] Given `DOCKER_AUTH_CONFIG` が空文字, when `DOCKER_CONFIG` が非空のディレクトリを指す, then その配下の `config.json` のみを読み、欠落時は `~/.docker/config.json` へフォールバックせず匿名になる。
-- [ ] Given `DOCKER_CONFIG` が空・未設定, when `~/.docker/config.json` が存在する, then それが使われる。
-- [ ] Given `alpine:latest` / `library/nginx` / `docker.io/org/private` / `index.docker.io/org/private` を解決する, when key を求める, then すべて `https://index.docker.io/v1/` になる。
-- [ ] Given `ghcr.io/org/app` / `localhost:5000/img` / `registry.example.com/img` を解決する, when key を求める, then ホスト名そのものが key になる。
-- [ ] Given `registry-1.docker.io/org/img` または `docker.io:5000/img` を解決する, when key を求める, then 正規化されず先頭コンポーネントが使われる。
-- [ ] Given エントリに `identitytoken` と `auth` が両方ある, when ヘッダを組み立てる, then `identitytoken` が優先される。
-- [ ] Given `auth` が base64 の `user:pass`, when ヘッダを組み立てる, then `username` / `password` / `serveraddress` を持つ JSON が base64 されて返る。
-- [ ] Given `auths` 欠落・key 不一致・base64 不正・空 `auth`, when 解決する, then ヘッダなし（匿名）になり、エラーで pull を妨げない。
-- [ ] Given 認証を解決した結果, when ログ・エラー・テスト出力を確認する, then 資格情報（token、base64、平文 user:pass）が現れない。
-- [ ] Given credential helper のみが設定された config.json, when 解決する, then helper は呼ばれず匿名になり、非対応であることがドキュメントに明記されている。
-- [ ] Given 公開 image の匿名 pull, when 認証設定が一切ない, then 0009 の pull が従来どおり成功する。
+- [x] Given `DOCKER_AUTH_CONFIG` と `DOCKER_CONFIG/config.json` と `~/.docker/config.json` が同時に存在する, when 認証を解決する, then `DOCKER_AUTH_CONFIG` の内容が優先される。(`select_auth_source` + async loader の env 固定テスト)
+- [x] Given `DOCKER_AUTH_CONFIG` が空文字, when `DOCKER_CONFIG` が非空のディレクトリを指す, then その配下の `config.json` のみを読み、欠落時は `~/.docker/config.json` へフォールバックせず匿名になる。(tmpdir fixture: DOCKER_CONFIG の空 dir + 有効な HOME config → None)
+- [x] Given `DOCKER_CONFIG` が空・未設定, when `~/.docker/config.json` が存在する, then それが使われる。(同上 fixture)
+- [x] Given `alpine:latest` / `library/nginx` / `docker.io/org/private` / `index.docker.io/org/private` を解決する, when key を求める, then すべて `https://index.docker.io/v1/` になる。
+- [x] Given `ghcr.io/org/app` / `localhost:5000/img` / `registry.example.com/img` を解決する, when key を求める, then ホスト名そのものが key になる。
+- [x] Given `registry-1.docker.io/org/img` または `docker.io:5000/img` を解決する, when key を求める, then 正規化されず先頭コンポーネントが使われる。
+- [x] Given エントリに `identitytoken` と `auth` が両方ある, when ヘッダを組み立てる, then `identitytoken` が優先される。
+- [x] Given `auth` が base64 の `user:pass`, when ヘッダを組み立てる, then `username` / `password` / `serveraddress` を持つ JSON が base64 されて返る。(`Json::stringify` で制御文字・引用符を正しくエスケープ — fixture 固定)
+- [x] Given `auths` 欠落・key 不一致・base64 不正・空 `auth`, when 解決する, then ヘッダなし（匿名）になり、エラーで pull を妨げない。
+- [x] Given 認証を解決した結果, when ログ・エラー・テスト出力を確認する, then 資格情報（token、base64、平文 user:pass）が現れない。(解決失敗は `None` を返すだけでエラーを構築しない;mock daemon の 401 エラー文面に token/その base64 が含まれないことを検証)
+- [x] Given credential helper のみが設定された config.json, when 解決する, then helper は呼ばれず匿名になり、非対応であることがドキュメントに明記されている。(`registry_auth.mbt` doc + PORTING.md 行)
+- [x] Given 公開 image の匿名 pull, when 認証設定が一切ない, then 0009 の pull が従来どおり成功する。(148 tests PASS — 認証なしでも従来のヘッダ構成)
 
 ## テスト計画
 
@@ -102,3 +102,4 @@ Docker の静的認証設定（`DOCKER_AUTH_CONFIG` / `DOCKER_CONFIG/config.json
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の「Registry auth」を本 issue で解消する。
 - 証跡: fixture config.json（資格情報はダミー値）、key 解決結果、ヘッダの構造（値はマスク）、非漏出テスト結果を残す。実在の資格情報をリポジトリやログへ残さない。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`registry_auth.mbt` 新設: `select_auth_source`（優先順の純粋関数、DOCKER_CONFIG 非空時は HOME フォールバックなし）、`auths_key`（docker.io/index.docker.io のみ Hub key 正規化、registry-1.docker.io / ポート付きは正規化しない）、`extract_auth_entry`（identitytoken 優先、auth base64→UTF-8 厳格デコード→先頭 `:` で分割、全失敗は None）。ペイロード構築は `Json::stringify` でエスケープ安全。`resolve_image`/`pull_image` に `X-Registry-Auth` を付与（`registry_auth_headers`、解決失敗は匿名で続行）。`fs`/`base64`/`encoding` 依存を moon.pkg に追加（fs は wbtest-only から昇格）。PORTING.md の matrix 更新（registry auth 行追加、M1 実装済み行の陳腐化解消）。mock daemon でヘッダ送出と 401 エラー非漏出を検証。moon check --deny-warn PASS、148 tests PASS。private registry の実認証 E2E は未実行（CI、検証用 registry 常設外）。

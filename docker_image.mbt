@@ -144,6 +144,8 @@ fn check_pull_stream_errors(body : Bytes, op~ : String) -> Unit raise {
 /// `GET /images/{name}/json` — resolve without pulling. 404 is
 /// classified `ImageNotFound` (context `ResolveImage`), other non-2xx
 /// statuses follow the 0017 table. Returns the descriptor on success.
+/// `X-Registry-Auth` is attached when static auth config resolves
+/// (0016); anonymous stays headerless.
 pub async fn DockerClient::resolve_image(
   self : DockerClient,
   descriptor : String,
@@ -153,6 +155,7 @@ pub async fn DockerClient::resolve_image(
     self.request(
       verb="GET",
       path="/images/\{percent_encode(descriptor)}/json",
+      headers=registry_auth_headers(descriptor),
       op="resolve image",
       context=EngineOp::resolve_image(),
       target=descriptor,
@@ -166,8 +169,10 @@ pub async fn DockerClient::resolve_image(
 /// `POST /images/create?fromImage=..&tag=..[&platform=..]` then scan
 /// the JSON Lines stream for daemon-reported failures. Non-2xx statuses
 /// are classified by `request` (401 → `Unauthorized`, 404 →
-/// `ImageNotFound`, etc. — distinct per issue 0009). No auth headers
-/// are sent (0016); stream errors raise `PullFailed`.
+/// `ImageNotFound`, etc. — distinct per issue 0009). `X-Registry-Auth`
+/// is attached when static auth config resolves (0016); credential
+/// helpers are unsupported — a helper-only config pulls anonymously.
+/// Stream errors raise `PullFailed`.
 pub async fn DockerClient::pull_image(
   self : DockerClient,
   descriptor : String,
@@ -183,6 +188,7 @@ pub async fn DockerClient::pull_image(
   let resp = self.request(
     verb="POST",
     path~,
+    headers=registry_auth_headers(descriptor),
     op="pull image",
     context=EngineOp::resolve_image(),
     target=descriptor,

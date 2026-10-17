@@ -1,17 +1,15 @@
 import {
   "moonbitlang/async",
+  "moonbitlang/async/fs",
   "moonbitlang/async/process",
   "moonbitlang/async/raw_fd",
   "moonbitlang/async/shell",
   "moonbitlang/async/socket",
+  "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }
-
-import {
-  "moonbitlang/async/fs",
-} for "wbtest"
 
 supported_targets = "+native"
 

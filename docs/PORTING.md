@@ -8,10 +8,11 @@ Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7a
 | TCP/UDP/SCTP port type | Yes | Implemented, checked range | Add string parsing and native port inspection |
 | ContainerRequest / labels / mounts | Yes | Partial, CLI args | Expand settings and parity contract |
 | Apple Container on macOS | XPC native bridge | CLI adapter only, unverified | Port XPC request/response and fd handling; Apple Silicon E2E |
-| Linux containers | Docker Engine HTTP over Unix socket | Docker CLI adapter only, unverified | Replace CLI path with native MoonBit Docker Engine transport |
-| Start / exec / stop / rm / logs | Async + sync APIs | Async CLI methods | Real runtime E2E, error classification, bounded output |
+| Linux containers | Docker Engine HTTP over Unix socket | Direct Engine transport (pull/create/start/inspect/stop/rm/wait/exec/logs); CLI adapter retained for Apple | Real daemon E2E in CI (issue 0020) |
+| Start / exec / stop / rm / logs | Async + sync APIs | Engine API + async CLI methods | Real runtime E2E, bounded output follow modes |
 | Readiness | log / duration / HTTP / health / exit | log and duration only | Implement remaining strategies, timeouts and cancellation |
-| Dynamic host port / bridge IP | Yes | Fixed host ports only | Runtime inspection |
+| Dynamic host port / bridge IP | Yes | Implemented via `NetworkSettings.Ports`/`Networks` inspection (IPv4/IPv6, protocol-aware) | Real-daemon verification in CI |
+| Registry auth | Static `auths` (`DOCKER_AUTH_CONFIG`/`DOCKER_CONFIG`/`~/.docker`) | Implemented; `X-Registry-Auth` on pull/resolve. Credential helpers (`credsStore`/`credHelpers`) intentionally unsupported | Private-registry E2E in CI |
 | Copy in/out | Yes | Not implemented | Tar stream and path validation |
 | Graceful cleanup / keep | Drop / explicit rm / watchdog | Explicit rm only | Safe scoped lifecycle helpers and watchdog |
 | Networking / platform / permissions | Broad feature coverage | Small subset | Add separately with host-specific tests |
@@ -41,4 +42,4 @@ Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7a
 
 **M2:** Apple Container XPC with Apple Silicon tests (macOS 26), logging and fd ownership, cleanup. The separate M0 CLI smoke acceptance is described in [APPLE_E2E.md](APPLE_E2E.md), and must not be mistaken for XPC compatibility.
 
-**M3:** Full documented parity matrix: copy, health/HTTP/exit waits, registry auth, volumes/networks, resource configuration, fault and timeout coverage. Merge only after CI green and approve-equivalent independent review.
+**M3:** Full documented parity matrix: copy, health/HTTP/exit waits, credential helpers, volumes/networks, resource configuration, fault and timeout coverage. Merge only after CI green and approve-equivalent independent review.
