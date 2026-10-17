@@ -104,6 +104,7 @@ pub struct GenericImage {
   mut network : String?
   mut platform : String?
   mut readonly_rootfs : Bool
+  copy_to : Array[CopyTarget]
 }
 
 ///|
@@ -128,6 +129,7 @@ pub fn GenericImage::new(name : String, tag : String) -> GenericImage raise {
     network: None,
     platform: None,
     readonly_rootfs: false,
+    copy_to: [],
   }
 }
 

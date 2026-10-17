@@ -2,7 +2,7 @@
 
 MoonBit-native port of [shiguredo/container-rs](https://github.com/shiguredo/container-rs). The original library exposes a testcontainers-like interface and uses **Apple Container XPC on macOS** and **Docker Engine API on Linux**.
 
-**Status: initial, incomplete port.** The current code offers native MoonBit image configuration and, on Linux, a **direct Docker Engine API adapter** (HTTP over the Unix socket — no `docker` CLI process) covering pull/create/start/inspect/stop/rm/wait/exec/logs, dynamic port resolution, bridge IP inspection, and static registry auth. The `docker`/`container` CLI adapters remain available through the explicit `start_cli` selection only; `start` never falls back to them. The original XPC client (Apple Silicon), Drop/watchdog cleanup, and full testcontainers parity are not yet implemented. Linux Docker runtime integration is tested in CI. The Apple Container path has not been tested on an Apple Silicon host.
+**Status: initial, incomplete port.** The current code offers native MoonBit image configuration and, on Linux, a **direct Docker Engine API adapter** (HTTP over the Unix socket — no `docker` CLI process) covering pull/create/start/inspect/stop/rm/wait/exec/logs, pre-start `with_copy_to` archive upload, dynamic port resolution, bridge IP inspection, and static registry auth. The `docker`/`container` CLI adapters remain available through the explicit `start_cli` selection only; `start` never falls back to them. The original XPC client (Apple Silicon), Drop/watchdog cleanup, and full testcontainers parity are not yet implemented. Linux Docker runtime integration is tested in CI. The Apple Container path has not been tested on an Apple Silicon host.
 
 ## Requirements
 

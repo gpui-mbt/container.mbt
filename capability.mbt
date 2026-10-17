@@ -39,6 +39,8 @@ pub enum Setting {
   Platform
   ReadonlyRootfs
   StartupTimeout
+  /// 0033: pre-start archive upload (PUT /containers/{id}/archive).
+  CopyTo
 }
 
 ///|
@@ -64,6 +66,7 @@ fn Setting::name(self : Setting) -> String {
     Platform => "platform"
     ReadonlyRootfs => "read-only rootfs"
     StartupTimeout => "startup timeout"
+    CopyTo => "copy-to"
   }
 }
 
@@ -116,12 +119,16 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | Network
         | Platform
         | ReadonlyRootfs
-        | StartupTimeout => Supported
+        | StartupTimeout
+        | CopyTo => Supported
       }
     CliDocker =>
       match setting {
         HealthcheckWait => NotYetImplemented(37)
         ExitWait => NotYetImplemented(38)
+        // docker cp is a CLI-binary path; the M1+ contract is
+        // archive-API only, so CLI copy-to stays unimplemented.
+        CopyTo => NotYetImplemented(33)
         Command
         | Entrypoint
         | ContainerName
@@ -156,6 +163,7 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
           Rejected("--read-only is not yet verified on Apple Container")
         HealthcheckWait => NotYetImplemented(37)
         ExitWait => NotYetImplemented(38)
+        CopyTo => NotYetImplemented(33)
         Command
         | Entrypoint
         | ContainerName
@@ -227,6 +235,9 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
   }
   if image.readonly_rootfs {
     used.push(ReadonlyRootfs)
+  }
+  if image.copy_to.length() > 0 {
+    used.push(CopyTo)
   }
   if image.startup_timeout_ms != 60000 {
     used.push(StartupTimeout)

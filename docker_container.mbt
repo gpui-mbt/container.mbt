@@ -332,6 +332,30 @@ pub async fn DockerClient::start_container(
 }
 
 ///|
+/// `PUT /containers/{id}/archive?path=/&copyUIDGID=true` — upload the
+/// tar built from `with_copy_to` sources while the container exists
+/// but is not yet started (0033).
+pub async fn DockerClient::put_container_archive(
+  self : DockerClient,
+  id : String,
+  tar : Bytes,
+  deadline? : Deadline,
+) -> Unit {
+  ignore(
+    self.request(
+      verb="PUT",
+      path="/containers/\{percent_encode(id)}/archive?path=%2F&copyUIDGID=true",
+      body=tar,
+      headers=[("Content-Type", "application/x-tar")],
+      op="copy to container",
+      context=EngineOp::container_lifecycle(),
+      target=id,
+      deadline?,
+    ),
+  )
+}
+
+///|
 /// Response-wait margin past the `t` grace for `stop_container` —
 /// upstream keeps the transport wait separate from the Docker grace.
 const DOCKER_STOP_MARGIN_MS : Int32 = 10_000

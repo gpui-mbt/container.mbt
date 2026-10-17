@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub const ARCHIVE_MAX_BYTES : Int64 = 67108864
+
 pub const CLEANUP_BUDGET_MS : Int = 5000
 
 pub const DEFAULT_DOCKER_SOCKET_PATH : String = "/var/run/docker.sock"
@@ -162,6 +164,21 @@ pub fn ContainerPort::sctp(Int) -> Self raise
 pub fn ContainerPort::tcp(Int) -> Self raise
 pub fn ContainerPort::udp(Int) -> Self raise
 
+pub enum CopyDataSource {
+  File(String)
+  Data(Bytes)
+}
+pub fn CopyDataSource::data(Bytes) -> Self
+pub fn CopyDataSource::file(String) -> Self
+
+pub struct CopyTarget {
+  target : String
+  mode : Int64
+  uid : Int64
+  gid : Int64
+  source : CopyDataSource
+}
+
 pub struct DaemonVersion {
   api_version : String
   version : String
@@ -195,6 +212,7 @@ pub fn DockerClient::new(socket_path? : String, connect_timeout_ms? : Int) -> Se
 pub async fn DockerClient::ping(Self, deadline? : Deadline) -> Unit
 pub async fn DockerClient::preflight(Self, min_api? : String, deadline? : Deadline) -> DaemonVersion
 pub async fn DockerClient::pull_image(Self, String, platform? : String, deadline? : Deadline) -> Unit
+pub async fn DockerClient::put_container_archive(Self, String, Bytes, deadline? : Deadline) -> Unit
 pub async fn DockerClient::recover_orphaned_containers(Self, limit? : Int, lock_dir? : String, deadline? : Deadline) -> RecoveryReport
 pub async fn DockerClient::remove_container(Self, String, force? : Bool, deadline? : Deadline) -> Unit
 pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, body_limit? : Int, deadline? : Deadline) -> HttpResponse
@@ -255,6 +273,7 @@ pub struct GenericImage {
   mut network : String?
   mut platform : String?
   mut readonly_rootfs : Bool
+  copy_to : Array[CopyTarget]
 }
 pub fn GenericImage::descriptor(Self) -> String
 pub fn GenericImage::mappings(Self) -> Array[PortMapping]
@@ -266,6 +285,7 @@ pub async fn GenericImage::start_detected(Self) -> Container
 pub async fn GenericImage::start_with_client(Self, DockerClient) -> Container
 pub fn GenericImage::with_cmd(Self, Array[String]) -> Self
 pub fn GenericImage::with_container_name(Self, String) -> Self
+pub fn GenericImage::with_copy_to(Self, String, CopyDataSource, mode? : Int64, uid? : Int64, gid? : Int64) -> Self raise
 pub fn GenericImage::with_entrypoint(Self, String) -> Self
 pub fn GenericImage::with_env_var(Self, String, String) -> Self
 pub fn GenericImage::with_exposed_port(Self, ContainerPort) -> Self raise
@@ -389,6 +409,7 @@ pub enum Setting {
   Platform
   ReadonlyRootfs
   StartupTimeout
+  CopyTo
 }
 
 pub enum Support {

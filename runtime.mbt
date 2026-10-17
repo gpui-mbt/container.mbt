@@ -336,7 +336,34 @@ pub async fn GenericImage::start_with_client(
     .with_container_name(attempt.name())
     .with_label(OWNERSHIP_LABEL, attempt.owner_id())
   ignore(client.resolve_or_pull_image(self.descriptor(), deadline~))
-  let id = client.create_and_start(attempt_image, deadline~)
+  let id = if attempt_image.copy_to.is_empty() {
+    client.create_and_start(attempt_image, deadline~)
+  } else {
+    // create → copy → start: a copy failure must not leave a created
+    // container behind, and the original error is what propagates.
+    let id = client.create_container(attempt_image, deadline~)
+    let needs_rollback : Ref[Bool] = { val: true, }
+    errdefer (if needs_rollback.val {
+      try
+        @async.protect_from_cancel(() => {
+          client.remove_container(
+            id,
+            force=true,
+            deadline=Deadline::after(CLEANUP_BUDGET_MS),
+          )
+        })
+      catch {
+        _ => ()
+      } noraise {
+        _ => ()
+      }
+    })
+    let tar = attempt_image.build_copy_archive()
+    client.put_container_archive(id, tar, deadline~)
+    client.start_container(id, deadline~)
+    needs_rollback.val = false
+    id
+  }
   let container : Container = {
     id,
     runtime: Docker,

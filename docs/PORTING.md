@@ -13,7 +13,7 @@ Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7a
 | Readiness | log / duration / HTTP / health / exit | log and duration only | Implement remaining strategies, timeouts and cancellation |
 | Dynamic host port / bridge IP | Yes | Implemented via `NetworkSettings.Ports`/`Networks` inspection (IPv4/IPv6, protocol-aware) | Real-daemon verification in CI |
 | Registry auth | Static `auths` (`DOCKER_AUTH_CONFIG`/`DOCKER_CONFIG`/`~/.docker`) | Implemented; `X-Registry-Auth` on pull/resolve. Credential helpers (`credsStore`/`credHelpers`) intentionally unsupported | Private-registry E2E in CI |
-| Copy in/out | Yes | Not implemented | Tar stream and path validation |
+| Copy to container | `PUT /containers/{id}/archive` between create and start | Implemented on the direct adapter: `with_copy_to` (`CopyDataSource::file`/`data`), ustar built in-memory (whole archive ≤ 64 MiB), parents auto-created at 0o755, copy failure rolls back the created container | Real-daemon E2E in CI; copy-from (0034) and path-security sweep (0035) |
 | Graceful cleanup / keep | Drop / explicit rm / watchdog | Explicit rm only | Safe scoped lifecycle helpers and watchdog |
 | Networking / platform / permissions | Broad feature coverage | Small subset | Add separately with host-specific tests |
 | Mac/Ubuntu E2E | Extensive | Linux Docker lifecycle smoke in CI; macOS pending | Native runners and host observability |

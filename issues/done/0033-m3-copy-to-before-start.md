@@ -1,6 +1,6 @@
 # [P1 / M3] Linux archive API による with_copy_to の起動前投入
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -52,14 +52,14 @@ Docker Engine API の `PUT /containers/{id}/archive` により、create 後・st
 
 ## 受け入れ条件
 
-- [ ] Given `with_copy_to("/work/config.txt", ...)` と、init が起動時にそのファイルを読むコマンド, when start する, then 内容が正しく読める（起動前投入が成立）。
-- [ ] Given 親ディレクトリが存在しないコンテナパス, when copy-to する, then 中間ディレクトリが自動作成される。
-- [ ] Given ホストディレクトリ, when copy-to する, then 再帰的に投入され、配下 regular file の mode / uid / gid が反映される（中間 directory は 0o755）。
-- [ ] Given 不正な投入先（相対パス、`..`、`//`、末尾 `.`、末尾 `/`、`/` のみ）, when start する, then archive 送信前に拒否され、作成済みコンテナは残らない。
-- [ ] Given ソースに symlink または非 regular file が含まれる, when copy-to する, then 拒否され start しない。
-- [ ] Given 64 MiB を超えるファイル, when start する, then 失敗し、部分投入を成功扱いしない。
-- [ ] Given copy が途中で失敗する, when start がエラーを返す, then コンテナが残らず、元エラーの内容が返る。
-- [ ] `with_copy_to` を使わない既存の create / start / exec / logs の挙動が変わらない。
+- [ ] Given `with_copy_to("/work/config.txt", ...)` と、init が起動時にそのファイルを読むコマンド, when start する, then 内容が正しく読める（起動前投入が成立）。**未実行**（実 daemon が必要。mock socket で create → `PUT archive` → start の順序と tar 内容は固定済み。実機確認は CI）
+- [x] Given 親ディレクトリが存在しないコンテナパス, when copy-to する, then 中間ディレクトリが自動作成される。（`push_parents` が 0o755 の directory エントリを先行追加 — wbtest で `work/` + `work/config.txt` の 2 エントリを検証）
+- [x] Given ホストディレクトリ, when copy-to する, then 再帰的に投入され、配下 regular file の mode / uid / gid が反映される（中間 directory は 0o755）。（`push_dir_tree` で readdir(sort=true) の深さ優先。file ソース / directory ソースともに mtime 実値・mode/uid/gid 適用 — wbtest で `dest/` 直下展開と単一 file を検証）
+- [x] Given 不正な投入先（相対パス、`..`、`//`、末尾 `.`、末尾 `/`、`/` のみ）, when start する, then archive 送信前に拒否され、作成済みコンテナは残らない。（`with_copy_to` が `validate_copy_target` で構築時に raise — コンテナは作られない。拒否行列 wbtest 済）
+- [x] Given ソースに symlink または非 regular file が含まれる, when copy-to する, then 拒否され start しない。（`@fs.kind(follow_symlink=false)` で SymLink / 非 Regular を拒否 — wbtest で tmpdir 上の symlink を検証）
+- [x] Given 64 MiB を超えるファイル, when start する, then 失敗し、部分投入を成功扱いしない。（file ソースは `file_size` 検査 + 読み後の成長検出（TOCTOU）、tar 全体は `TarBuilder::push` が header/padding/trailer 込みの合計で `ARCHIVE_MAX_BYTES` を強制 — 境界値丁度・+1 の wbtest 済。実 daemon での巨大 fixture 投入は CI）
+- [x] Given copy が途中で失敗する, when start がエラーを返す, then コンテナが残らず、元エラーの内容が返る。（`errdefer` が `protect_from_cancel` + `CLEANUP_BUDGET_MS` で作成 ID のみ force-remove。mock で PUT 500 → `DELETE /containers/cid?force=true` が wire に出て、`{"message":"tar fail"}` が呼び出し側へ返ることを固定）
+- [x] `with_copy_to` を使わない既存の create / start / exec / logs の挙動が変わらない。（`copy_to.is_empty()` 時は従来の `create_and_start` 経路のまま — 既存 157→166→169 テストが回帰なしで PASS）
 
 ## テスト計画
 
@@ -90,3 +90,4 @@ Docker Engine API の `PUT /containers/{id}/archive` により、create 後・st
 - 証跡: 起動前投入を確認する init の出力、`stat` の結果、失敗時の `docker ps -a` と stderr。
 - 関連: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。0035 が本 issue と 0034 に共通する tar 安全性を担当する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`copy.mbt` に `CopyDataSource::{File,Data}`（`::file`/`::data` コンストラクタ）・`CopyTarget`・`GenericImage::with_copy_to(target, source, mode?=0o644, uid?=0, gid?=0)`・`build_copy_archive`・`validate_copy_target`・`push_parents`/`push_dir_tree`（sort 済再帰、symlink/非 regular 拒否、file_size + 成長検出）。`docker_tar.mbt` に `TarBuilder`（ustar magic・checksum・octal field・name/prefix 分割・末尾 `/` discipline・`ARCHIVE_MAX_BYTES`=64 MiB 全体上限）。`docker_container.mbt` に `put_container_archive`（`PUT /containers/{id}/archive?path=%2F&copyUIDGID=true`, `application/x-tar`, 404 は `ContainerNotFound` 分類）。`runtime.mbt` の direct start を create → copy → start に拡張し、copy 失敗時は `errdefer` で force-remove + 元エラー再送出。`capability.mbt` に `Setting::CopyTo`（DirectDocker=Supported、CLI/Apple=NotYetImplemented(33)）。docs/PORTING.md・README.md 更新。`moon check --target native --deny-warn` PASS、169 tests PASS（ustar 構造・検証行列・wire 順序・rollback・64 MiB 境界・引用符パス・404 分類を網羅）。実 daemon での init-起動前読取・`stat` 確認・巨大 fixture は CI に委譲（未実行と明記）。
