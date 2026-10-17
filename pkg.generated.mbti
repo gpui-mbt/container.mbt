@@ -126,6 +126,8 @@ pub struct Container {
   mut removed : Bool
   // private fields
 }
+pub async fn Container::copy_file_from(Self, String) -> Bytes
+pub async fn Container::copy_file_to_host(Self, String, dest~ : String) -> Unit
 pub async fn Container::exec(Self, Array[String]) -> ProcessOutput
 pub async fn Container::get_bridge_ip_address(Self) -> String
 pub async fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int
@@ -198,6 +200,7 @@ pub async fn Deadline::sleep_bounded(Self, op~ : String, Int) -> Unit
 pub struct DockerClient {
   transport : UnixSocketTransport
 }
+pub async fn DockerClient::copy_file_from(Self, String, String, deadline? : Deadline) -> Bytes
 pub async fn DockerClient::create_and_start(Self, GenericImage, deadline? : Deadline) -> String
 pub async fn DockerClient::create_container(Self, GenericImage, deadline? : Deadline) -> String
 pub async fn DockerClient::exec(Self, String, cmd~ : Array[String], env? : Array[(String, String)], deadline? : Deadline) -> DockerExecResult
@@ -215,7 +218,7 @@ pub async fn DockerClient::pull_image(Self, String, platform? : String, deadline
 pub async fn DockerClient::put_container_archive(Self, String, Bytes, deadline? : Deadline) -> Unit
 pub async fn DockerClient::recover_orphaned_containers(Self, limit? : Int, lock_dir? : String, deadline? : Deadline) -> RecoveryReport
 pub async fn DockerClient::remove_container(Self, String, force? : Bool, deadline? : Deadline) -> Unit
-pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, body_limit? : Int, deadline? : Deadline) -> HttpResponse
+pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, body_limit? : Int, container_path? : String, deadline? : Deadline) -> HttpResponse
 pub async fn DockerClient::resolve_image(Self, String, deadline? : Deadline) -> String
 pub async fn DockerClient::resolve_or_pull_image(Self, String, platform? : String, deadline? : Deadline) -> String
 pub async fn DockerClient::start_container(Self, String, deadline? : Deadline) -> Unit

@@ -182,3 +182,112 @@ fn TarBuilder::finish(self : TarBuilder) -> Bytes raise {
   self.push(Bytes::make(1024, b'\x00'))
   Bytes::from_array(self.data)
 }
+
+///|
+/// Parse-only errors for `GET /containers/{id}/archive` responses
+/// (issue 0034), mirroring upstream `parse_first_regular_file_from_ustar`.
+priv suberror TarReadError {
+  EmptyArchive
+  IsDirectory(String)
+  UnsupportedEntry(String)
+  GzippedArchive
+  ChecksumMismatch(String)
+  TruncatedData(name~ : String)
+  BadHeader(String)
+}
+
+///|
+/// Read an octal field terminated by NUL or space.
+fn octal_parse(block : Bytes, at : Int32, width : Int32) -> Int64 raise {
+  let mut v : Int64 = 0
+  let mut saw = false
+  for i = at; i < at + width; i = i + 1 {
+    let c = block[i]
+    if c >= b'0' && c <= b'7' {
+      v = v * 8 + (c.to_int() - '0'.to_int()).to_int64()
+      saw = true
+    } else if c == b'\x00' || c == b' ' {
+      break
+    } else {
+      raise BadHeader("non-octal byte in numeric field")
+    }
+  }
+  if !saw {
+    raise BadHeader("empty numeric field")
+  }
+  v
+}
+
+///|
+/// Verify a header block: checksum matches and the ustar magic is
+/// present. Returns the entry name.
+fn verify_ustar_header(block : Bytes) -> String raise {
+  let mut sum : Int64 = 0
+  for i = 0; i < 512; i = i + 1 {
+    sum += if i >= 148 && i < 156 { 32 } else { block[i].to_int().to_int64() }
+  }
+  let stored = octal_parse(block, 148, 8)
+  guard stored == sum else {
+    raise ChecksumMismatch("stored=\{stored} computed=\{sum}")
+  }
+  // POSIX ustar\0 and GNU "ustar " magic are both accepted.
+  guard block[257] == b'u' &&
+    block[258] == b's' &&
+    block[259] == b't' &&
+    block[260] == b'a' &&
+    block[261] == b'r' else {
+    raise BadHeader("missing ustar magic")
+  }
+  let mut end = 0
+  while end < 100 && block[end] != b'\x00' {
+    end += 1
+  }
+  @utf8.decode_lossy(block[:end].to_owned())
+}
+
+///|
+/// Whether a 512-byte block is entirely zero (end-of-archive marker).
+fn is_zero_block(block : Bytes) -> Bool {
+  for i = 0; i < 512; i = i + 1 {
+    if block[i] != b'\x00' {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// `parse_first_regular_file_from_ustar` — interpret only the leading
+/// entry of an archive response. A directory yields `IsDirectory`, an
+/// all-zero/absent entry `EmptyArchive`, link/device/fifo entries and
+/// gzip magic `UnsupportedEntry`/`GzippedArchive`, checksum or data
+/// truncation a hard error. No partial payload is ever returned; the
+/// declared size is bounds-checked against the actual buffer (no
+/// capacity preallocation, matching upstream).
+fn parse_first_regular_file(tar : Bytes) -> Bytes raise {
+  if tar.length() < 512 {
+    raise EmptyArchive
+  }
+  if tar[0] == b'\x1f' && tar[1] == b'\x8b' {
+    raise GzippedArchive
+  }
+  let head = tar[:512].to_owned()
+  if is_zero_block(head) {
+    raise EmptyArchive
+  }
+  let name = verify_ustar_header(head)
+  let typeflag = head[156]
+  guard typeflag == b'0' || typeflag == b'\x00' else {
+    if typeflag == b'5' {
+      raise IsDirectory(name)
+    }
+    raise UnsupportedEntry("\{name} (typeflag \{typeflag.to_int()})")
+  }
+  let size = octal_parse(head, 124, 12)
+  guard size <= ARCHIVE_MAX_BYTES else {
+    raise TooLarge(limit=ARCHIVE_MAX_BYTES)
+  }
+  let end = 512L + size
+  guard end <= tar.length().to_int64() else { raise TruncatedData(name~) }
+  tar[512:end.to_int()].to_owned()
+}

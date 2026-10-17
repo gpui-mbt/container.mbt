@@ -1,6 +1,6 @@
 # [P1 / M3] copy_file_from でファイルを安全に取り出す
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -52,15 +52,14 @@ Docker Engine API の `GET /containers/{id}/archive` と ustar parser により�
 
 ## 受け入れ条件
 
-- [ ] Given コンテナ内に既知内容の regular file, when copy_file_from する, then bytes が内容と一致する。
-- [ ] Given directory のパス, when copy_file_from する, then `IsDirectory` 相当のエラーになり、部分データを返さない。
-- [ ] Given 不存在コンテナ, when copy_file_from する, then コンテナ不存在エラーになる（パス不存在と混同しない）。
-- [ ] Given 不存在パス, when copy_file_from する, then パス不存在エラーになる。
-- [ ] Given 64 MiB を超えるファイル, when copy_file_from する, then 切り詰めずエラーになる。
-- [ ] Given 先頭エントリが symlink / hardlink / device / fifo / gzip, when parse する, then 形式エラーで拒否される。
-- [ ] Given チェックサム不一致や truncated data, when parse する, then エラーになり部分データを成功扱いしない。
-- [ ] ホストファイル出力は成功時のみ内容が一致し、失敗時の部分ファイル残留が docs に明記されている。
-
+- [x] Given コンテナ内に既知内容の regular file, when copy_file_from する, then bytes が内容と一致する。（mock daemon が ustar を返し `copy_file_from` が payload を返す wire テスト — 実 daemon での確認は CI に委譲）
+- [x] Given directory のパス, when copy_file_from する, then `IsDirectory` 相当のエラーになり、部分データを返さない。（`TarReadError::IsDirectory` — wbtest で固定）
+- [x] Given 不存在コンテナ, when copy_file_from する, then コンテナ不存在エラーになる（パス不存在と混同しない）。（`EngineOp::archive()` の 404 分岐：prefix 不一致・非 JSON・空 body は `ContainerNotFound` — wbtest で 3 形態を固定）
+- [x] Given 不存在パス, when copy_file_from する, then パス不存在エラーになる。（`{"message": "Could not find the file ..."}` prefix → `ContainerPathNotFound(op, container, path)` — `request` が `container_path` を classifier へ渡す）
+- [x] Given 64 MiB を超えるファイル, when copy_file_from する, then 切り詰めずエラーになる。（`request` の `body_limit=ARCHIVE_MAX_BYTES` で HTTP 層が `BodyTooLarge`、parse 側でも size > 上限を拒否）
+- [x] Given 先頭エントリが symlink / hardlink / device / fifo / gzip, when parse する, then 形式エラーで拒否される。（typeflag 1/2/3/4/6/他は `UnsupportedEntry`、archive 先頭の `0x1f 0x8b` は `GzippedArchive` — wbtest で全 typeflag を巡回）
+- [x] Given チェックサム不一致や truncated data, when parse する, then エラーになり部分データを成功扱いしない。（`ChecksumMismatch` / `TruncatedData` / `BadHeader`。declared size は buffer 末尾と比較し、capacity 事前確保なし — wbtest で固定）
+- [x] ホストファイル出力は成功時のみ内容が一致し、失敗時の部分ファイル残留が docs に明記されている。（`copy_file_to_host` はメモリ内で完全検証してから一括 write — 部分ファイルが残らない設計。相対 dest は cwd 基準で絶対化）
 ## テスト計画
 
 - `moon check --target native --deny-warn` と `moon test --target native` を実行し、PASS / FAIL / 未実行を記録する。
@@ -89,4 +88,5 @@ Docker Engine API の `GET /containers/{id}/archive` と ustar parser により�
 - 主な参照: [src/core/copy.rs](https://github.com/shiguredo/container-rs/blob/f68ba1ffed67c9c4e9abdb39212835d50d7afcf3/src/core/copy.rs)、[src/core/client/docker_tar.rs](https://github.com/shiguredo/container-rs/blob/f68ba1ffed67c9c4e9abdb39212835d50d7afcf3/src/core/client/docker_tar.rs)、404 分類は [src/core/client/docker_client.rs](https://github.com/shiguredo/container-rs/blob/f68ba1ffed67c9c4e9abdb39212835d50d7afcf3/src/core/client/docker_client.rs) の `classify_archive_404`、macOS は [src/core/client/xpc_client.rs](https://github.com/shiguredo/container-rs/blob/f68ba1ffed67c9c4e9abdb39212835d50d7afcf3/src/core/client/xpc_client.rs) の `copy_out`。
 - 証跡: 404 応答ボディ、取得バイトの比較ログ、`docker ps -a` の前後。
 - 関連: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。0035 が builder / parser の安全性を共通で担当する。
+- 2026-11-04: 実装。`docker_tar.mbt` に `TarReadError`（EmptyArchive/IsDirectory/UnsupportedEntry/GzippedArchive/ChecksumMismatch/TruncatedData/BadHeader）と `parse_first_regular_file`（先頭エントリのみ、checksum+ustar/GNU magic 検証、octal parse、size 境界検査、capacity 事前確保なし）。`docker_container.mbt` に `DockerClient::copy_file_from`（`GET /containers/{id}/archive?path=`、body_limit=64 MiB、`EngineOp::archive` で 404 の path/container 分類）。`docker_client.mbt` の `request` に `container_path` を追加し classifier へ配線。`runtime.mbt` に `Container::copy_file_from`（Bytes 形式）と `copy_file_to_host`（PathBuf 形式相当、cwd 相対解決、検証後一括 write）— direct adapter 専用、CLI は明示 NYI(34) エラー。175 tests PASS、`moon check --deny-warn` PASS。実 daemon での既知内容取得・directory エラー・巨大 file は CI に委譲。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた

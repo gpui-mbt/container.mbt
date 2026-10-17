@@ -648,3 +648,29 @@ pub async fn DockerClient::create_and_start(
   needs_rollback.val = false
   id
 }
+
+///|
+/// `GET /containers/{id}/archive?path=...` then parse the leading
+/// ustar entry (issue 0034). A 404 splits via `EngineOp::archive()`:
+/// daemon `message` starting with "Could not find the file " →
+/// `ContainerPathNotFound`, otherwise `ContainerNotFound`. The whole
+/// body is bounded by `ARCHIVE_MAX_BYTES`; a corrupt or truncated tar
+/// raises `TarReadError` and never yields partial payload.
+pub async fn DockerClient::copy_file_from(
+  self : DockerClient,
+  id : String,
+  path : String,
+  deadline? : Deadline,
+) -> Bytes {
+  let resp = self.request(
+    verb="GET",
+    path="/containers/\{percent_encode(id)}/archive?path=\{percent_encode(path)}",
+    op="copy from container",
+    context=EngineOp::archive(),
+    target=id,
+    container_path=path,
+    body_limit=ARCHIVE_MAX_BYTES.to_int(),
+    deadline?,
+  )
+  parse_first_regular_file(resp.body)
+}

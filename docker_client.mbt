@@ -170,6 +170,9 @@ pub async fn DockerClient::request(
   headers~ : Array[(String, String)] = [],
   body~ : Bytes = b"",
   body_limit~ : Int32 = HTTP_RESPONSE_BODY_LIMIT,
+  /// In-container path for archive ops — lets a 404 classify into
+  /// ContainerPathNotFound instead of a bare ContainerNotFound (0034).
+  container_path~ : String = "",
   deadline? : Deadline,
 ) -> HttpResponse {
   let conn = self.send_request(verb~, path~, op~, headers~, body~, deadline?)
@@ -218,6 +221,7 @@ pub async fn DockerClient::request(
       status=resp.status,
       body=resp.body,
       target~,
+      path=container_path,
     )
   }
   resp

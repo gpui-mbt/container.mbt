@@ -616,3 +616,49 @@ async fn Container::wait_for_log_until(
     @async.sleep(startup_command_timeout_ms(deadline, 250))
   }
 }
+
+///|
+/// `copy_file_from` (issue 0034): read the single regular file at
+/// `path` inside the container and return its bytes. Direct-adapter
+/// only — the archive API is the M1+ contract, so CLI-created
+/// containers report an explicit not-yet-implemented error instead of
+/// falling back to `docker cp`. Directory paths raise `IsDirectory`,
+/// a missing container path raises `ContainerPathNotFound`, a missing
+/// container `ContainerNotFound`; corrupt/truncated tars and bodies
+/// over 64 MiB fail closed — partial payload is never returned.
+pub async fn Container::copy_file_from(
+  self : Container,
+  path : String,
+) -> Bytes {
+  guard !self.removed else { fail("container already removed") }
+  guard !path.is_empty() else { fail("container path must not be empty") }
+  match self.client {
+    Some(client) => client.copy_file_from(self.id, path)
+    None =>
+      fail(
+        "copy_file_from is only supported on the direct adapter (issue 0034); CLI adapters are NotYetImplemented(34)",
+      )
+  }
+}
+
+///|
+/// `copy_file_from` writing to a host file — upstream's PathBuf
+/// `CopyFileFromContainer` form. A relative `dest` resolves against the
+/// caller's cwd. The file is created only after the full payload is
+/// validated in memory, so a failed copy never leaves a partial file.
+pub async fn Container::copy_file_to_host(
+  self : Container,
+  path : String,
+  dest~ : String,
+) -> Unit {
+  let bytes = self.copy_file_from(path)
+  let abs = if dest.has_prefix("/") {
+    dest
+  } else {
+    match @env.current_dir() {
+      Some(cwd) => "\{cwd}/\{dest}"
+      None => fail("cannot resolve relative destination: \{dest}")
+    }
+  }
+  @fs.write_file(abs, bytes[:])
+}
