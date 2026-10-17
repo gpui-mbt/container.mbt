@@ -34,7 +34,24 @@ async fn serve_mock_engine(
     defer conn.close()
     let head = conn.read_until("\r\n\r\n").unwrap_or("")
     requests.push(head.split("\r\n").collect()[0].to_owned())
-    conn.write_all(respond(head))
+    // Consume the request body too — leaving it unread makes close()
+    // RST the in-flight response, and hides POST bodies from respond().
+    let mut request = head
+    for line in head.split("\r\n") {
+      if ascii_lower(line.to_owned()).has_prefix("content-length:") {
+        let mut n = 0
+        for c in line[15:] {
+          if c is ('0'..<='9') {
+            n = n * 10 + (c.to_int() - '0'.to_int())
+          }
+        }
+        if n > 0 {
+          let body = conn.read_exactly(n)
+          request = "\{head}\r\n\r\n\{@utf8.decode_lossy(body)}"
+        }
+      }
+    }
+    conn.write_all(respond(request))
   }
 }
 
@@ -42,6 +59,14 @@ async fn serve_mock_engine(
 fn http_200(body : String) -> Bytes {
   @utf8.encode(
     "HTTP/1.1 200 OK\r\nContent-Length: \{body.length()}\r\nConnection: close\r\n\r\n\{body}",
+  )
+}
+
+///|
+/// `HTTP/1.1 \{status} \{reason}` with a computed Content-Length.
+fn http_resp(status : String, reason : String, body : String) -> Bytes {
+  @utf8.encode(
+    "HTTP/1.1 \{status} \{reason}\r\nContent-Length: \{body.length()}\r\nConnection: close\r\n\r\n\{body}",
   )
 }
 

@@ -31,10 +31,10 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0006 Node/Rust に依存しない Docker Unix socket transport](./done/0006-m1-docker-unix-socket-transport.md) — P0
 - [x] [0007 Docker HTTP/1.1 応答・chunked・stream decoder を実装](./done/0007-m1-docker-http-framing-parser.md) — P0 / deps: 0006
 - [ ] [0008 Docker API version・daemon readiness の判定を追加](./polished/0008-m1-docker-daemon-version-preflight.md) — P1 / deps: 0006, 0007
-- [ ] [0009 Docker Engine API の image pull と progress/error を実装](./polished/0009-m1-native-image-pull.md) — P0 / deps: 0006, 0007
-- [ ] [0010 Docker Engine API の create/start と request serialization](./polished/0010-m1-docker-create-start.md) — P0 / deps: 0006, 0007, 0009
-- [ ] [0011 Docker inspect/stop/rm/wait と冪等 lifecycle を移植](./polished/0011-m1-docker-inspect-stop-rm-wait.md) — P0 / deps: 0010
-- [ ] [0012 Docker exec create/start と stdout/stderr 多重化を移植](./polished/0012-m1-docker-exec-attach.md) — P0 / deps: 0011, 0007
+- [x] [0009 Docker Engine API の image pull と progress/error を実装](./done/0009-m1-native-image-pull.md) — P0 / deps: 0006, 0007
+- [x] [0010 Docker Engine API の create/start と request serialization](./done/0010-m1-docker-create-start.md) — P0 / deps: 0006, 0007, 0009
+- [x] [0011 Docker inspect/stop/rm/wait と冪等 lifecycle を移植](./done/0011-m1-docker-inspect-stop-rm-wait.md) — P0 / deps: 0010
+- [x] [0012 Docker exec create/start と stdout/stderr 多重化を移植](./done/0012-m1-docker-exec-attach.md) — P0 / deps: 0011, 0007
 - [ ] [0013 Docker stdout/stderr の follow/attach と有界取得](./polished/0013-m1-docker-log-stream.md) — P1 / deps: 0011, 0007
 - [ ] [0014 Docker の動的 host port を IPv4/IPv6 inspect で解決](./polished/0014-m1-dynamic-published-ports.md) — P0 / deps: 0011
 - [ ] [0015 Container bridge IP と network 情報を正規化](./polished/0015-m1-bridge-ip-inspection.md) — P1 / deps: 0011

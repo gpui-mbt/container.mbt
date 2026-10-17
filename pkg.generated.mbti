@@ -10,6 +10,8 @@ pub const CLEANUP_BUDGET_MS : Int = 5000
 
 pub const DEFAULT_DOCKER_SOCKET_PATH : String = "/var/run/docker.sock"
 
+pub const DOCKER_PULL_TIMEOUT_MS : Int = 300_000
+
 pub const ENGINE_RETRY_MAX : Int = 6
 
 pub const HTTP_RESPONSE_BODY_LIMIT : Int = 67108864
@@ -58,6 +60,8 @@ pub(all) suberror EngineError {
   TransportError(op~ : String, detail~ : String)
   ApiVersionTooOld(op~ : String, found~ : String, required~ : String)
   DeadlineExceeded(op~ : String)
+  PullFailed(op~ : String, message~ : String)
+  ExecExitUndetermined(op~ : String, exec_id~ : String)
 }
 pub fn EngineError::describe(Self) -> String
 pub fn EngineError::output(Self, &Logger) -> Unit
@@ -107,6 +111,12 @@ pub fn Container::runtime(Self) -> Runtime
 pub async fn Container::stop(Self) -> Unit
 pub async fn Container::wait_ready(Self, Array[WaitFor], Int) -> Unit
 
+pub struct ContainerInspect {
+  running : Bool
+  exit_code : Int?
+  env : Array[String]
+}
+
 pub struct ContainerPort {
   number : Int
   protocol : Protocol
@@ -138,11 +148,28 @@ pub async fn Deadline::sleep_bounded(Self, op~ : String, Int) -> Unit
 pub struct DockerClient {
   transport : UnixSocketTransport
 }
+pub async fn DockerClient::create_and_start(Self, GenericImage, deadline? : Deadline) -> String
+pub async fn DockerClient::create_container(Self, GenericImage, deadline? : Deadline) -> String
+pub async fn DockerClient::exec(Self, String, cmd~ : Array[String], env? : Array[(String, String)], deadline? : Deadline) -> DockerExecResult
+pub async fn DockerClient::inspect_container(Self, String, deadline? : Deadline) -> ContainerInspect
 pub fn DockerClient::new(socket_path? : String, connect_timeout_ms? : Int) -> Self
 pub async fn DockerClient::ping(Self, deadline? : Deadline) -> Unit
 pub async fn DockerClient::preflight(Self, min_api? : String, deadline? : Deadline) -> DaemonVersion
+pub async fn DockerClient::pull_image(Self, String, platform? : String, deadline? : Deadline) -> Unit
+pub async fn DockerClient::remove_container(Self, String, force? : Bool, deadline? : Deadline) -> Unit
 pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, deadline? : Deadline) -> HttpResponse
+pub async fn DockerClient::resolve_image(Self, String, deadline? : Deadline) -> String
+pub async fn DockerClient::resolve_or_pull_image(Self, String, platform? : String, deadline? : Deadline) -> String
+pub async fn DockerClient::start_container(Self, String, deadline? : Deadline) -> Unit
+pub async fn DockerClient::stop_container(Self, String, timeout_seconds? : Int, deadline? : Deadline) -> Unit
 pub async fn DockerClient::version(Self, deadline? : Deadline) -> DaemonVersion
+pub async fn DockerClient::wait_container(Self, String, deadline? : Deadline) -> Int
+
+pub struct DockerExecResult {
+  exit_code : Int
+  stdout : Bytes
+  stderr : Bytes
+}
 
 pub enum EngineOp {
   ResolveImage

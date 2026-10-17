@@ -1,9 +1,9 @@
 # [P0 / M1] Docker Engine API の image pull と progress/error を実装
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M1
@@ -58,15 +58,15 @@ Docker Engine API の `POST /images/create` で image を pull し、JSON Lines 
 
 ## 受け入れ条件
 
-- [ ] Given Docker 実機で `alpine:3.20` がローカルに無い, when resolve → pull を実行する, then `/images/create` が成功し再 resolve が成功する（docker CLI 未使用）。
-- [ ] Given 既にローカルにある image, when resolve する, then pull は呼ばれない（リクエストログで確認）。
-- [ ] Given 存在しない image, then 404 が「image が見つからない」として分類される。
-- [ ] Given 認証が必要な private repository, then 401 / 認証失敗が 404 と区別され、エラーに認証情報が含まれない。
-- [ ] Given pull stream の途中または末尾に非空の `error` / `errorDetail.message`, then 行位置に関係なく失敗として返る。
-- [ ] Given pull stream に非 object / 不正 JSON 行, then JSON エラーとして失敗する。空行のみのボディは成功する（upstream と同じ）。
-- [ ] Given pull が timeout, then 有界時間で失敗し、接続と資源が残らない。
-- [ ] Given pull 後の CLI なし start, then 0010 の実装と結合した受入（0020）で確認する。0010 未完了の間は「未実行」と記録する。
-- [ ] Given `moon check --target native --deny-warn` と `moon test --target native`, then PASS する。
+- [ ] Given Docker 実機で `alpine:3.20` がローカルに無い, when resolve → pull を実行する, then `/images/create` が成功し再 resolve が成功する（docker CLI 未使用）。**未実行**（実 daemon 不在 — CI docker ジョブに委譲。mock daemon で同等経路を検証済み）
+- [x] Given 既にローカルにある image, when resolve する, then pull は呼ばれない（リクエストログで確認）。(mock daemon の request 記録で `/images/create` 未発行を確認)
+- [x] Given 存在しない image, then 404 が「image が見つからない」として分類される。(`ResolveImage` context の 404 → `ImageNotFound`)
+- [x] Given 認証が必要な private repository, then 401 / 認証失敗が 404 と区別され、エラーに認証情報が含まれない。(401 → `Unauthorized` で `ImageNotFound` と別分類。auth ヘッダは未送信 — 0016 の責務。エラー文言は daemon の `message` のみで request ヘッダを含まない)
+- [x] Given pull stream の途中または末尾に非空の `error` / `errorDetail.message`, then 行位置に関係なく失敗として返る。(`check_pull_stream_errors` → `PullFailed`)
+- [x] Given pull stream に非 object / 不正 JSON 行, then JSON エラーとして失敗する。空行のみのボディは成功する（upstream と同じ）。(非 object・不正 JSON・非 UTF-8 → `MalformedResponse`、空 body・空行・progress・aux は無視)
+- [x] Given pull が timeout, then 有界時間で失敗し、接続と資源が残らない。(stalled mock daemon が 300ms deadline で打ち切られ、`DeadlineExceeded` を返し socket は `defer close` で解放。呼び出し側 deadline 省略時は `DOCKER_PULL_TIMEOUT_MS=300_000` で打ち切る)
+- [ ] Given pull 後の CLI なし start, then 0010 の実装と結合した受入（0020）で確認する。0010 未完了の間は「未実行」と記録する。**未実行**（0010/0020 待ち）
+- [x] Given `moon check --target native --deny-warn` と `moon test --target native`, then PASS する。(check clean、88 tests PASS)
 
 ## テスト計画
 
@@ -97,3 +97,6 @@ Docker Engine API の `POST /images/create` で image を pull し、JSON Lines 
 - upstream 参照: `pull_image` / `split_pull_reference` / `check_pull_stream_errors` / `pull_error_message` / `resolve_image_descriptor`（docker_client.rs）、`resolve_or_pull_linux`（async_runner.rs）、`ImageConfig`（[src/core/client/image_config.rs](https://github.com/shiguredo/container-rs/blob/f68ba1ffed67c9c4e9abdb39212835d50d7afcf3/src/core/client/image_config.rs) は 0010 の create で使う）、registry auth（0016 が移植）。
 - CLI の暗黙 pull と並存するため、0020 の E2E と 0019 の移行方針で経路を明示する。関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。docker_image.mbt に upstream `split_pull_reference`（digest 優先・tag は最後の `/` 以降・空は latest）、`check_pull_stream_errors`（JSON Lines の非空 error/errorDetail.message → `EngineError::PullFailed`、不正行 → `MalformedResponse`）、`resolve_image`（`GET /images/{name}/json`、path セグメント percent-encode）、`pull_image`（`POST /images/create?fromImage=&tag=[&platform=]`）、`resolve_or_pull_image`（404 のときだけ pull → 再 resolve）を追加。`percent_encode` を docker_client.mbt に新設（unreserved のみ、スペースは %20）。timeout は `deadline?`（0018）を受け、省略時 `DOCKER_PULL_TIMEOUT_MS=300_000`。`EngineError` に `PullFailed` variant 追加。mock daemon wbtest で resolve/pull/401/stream error/timeout を検証。実 daemon・0010 結合 E2E は未実行。moon check --deny-warn PASS、88 tests PASS。
+- 2026-11-04: pull/resolve implemented, verifying
+- 2026-11-04: mock-daemon verified; real-daemon pull deferred to CI docker job

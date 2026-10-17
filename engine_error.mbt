@@ -74,6 +74,15 @@ pub(all) suberror EngineError {
   /// The shared operation deadline expired mid-operation. Distinct
   /// from `TransportError` (connection broke) per issue 0018.
   DeadlineExceeded(op~ : String)
+  /// The pull progress stream reported a failure (`error` /
+  /// `errorDetail.message` JSON Lines fields, upstream
+  /// `check_pull_stream_errors`). Not an HTTP status — the daemon
+  /// answered 200 and failed mid-stream.
+  PullFailed(op~ : String, message~ : String)
+  /// The exec stream ended but `Running` never settled to false
+  /// (upstream warns and yields `None`; we fail rather than fake 0 —
+  /// issue 0012's stricter contract).
+  ExecExitUndetermined(op~ : String, exec_id~ : String)
 }
 
 ///|
@@ -109,6 +118,9 @@ pub fn EngineError::describe(self : EngineError) -> String {
     ApiVersionTooOld(op~, found~, required~) =>
       "\{op}: Docker API version \{found} is older than required \{required}"
     DeadlineExceeded(op~) => "\{op}: deadline exceeded"
+    PullFailed(op~, message~) => "\{op}: pull failed: \{message}"
+    ExecExitUndetermined(op~, exec_id~) =>
+      "\{op}: exec \{exec_id} exit code did not settle within the retry budget"
   }
 }
 

@@ -1,9 +1,9 @@
 # [P0 / M1] Docker exec create/start と stdout/stderr 多重化を移植
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M1
@@ -56,15 +56,15 @@ Docker Engine API の exec create/start/inspect を直結で実装し、multiple
 
 ## 受け入れ条件
 
-- [ ] Given stdout と stderr が frame 単位で交互に届く, when exec 出力を復元する, then stdout/stderr がそれぞれ正しい順序と内容で分離され、混線しない。
-- [ ] Given `exit 7` で stdout と stderr の両方へ出力するコマンド, when exec する, then exit code 7 と両ストリームの出力が復元される。
-- [ ] Given payload 長 0 の frame、stdin（type 0）frame、未知 type の frame, when demux する, then stdout/stderr に混入せず、後続 frame の処理が継続する。
-- [ ] Given ヘッダが受信境界で分割される, when demux する, then frame として正しく再結合される。
-- [ ] Given 蓄積が 64 MiB を超える出力, when start 応答を読む, then 切り詰めず明示エラーになる（ちょうど 64 MiB は成功）。
-- [ ] Given raw stream（TTY 有効）の応答, when 解析する, then frame として解釈せず明示エラーになる。
-- [ ] Given コンテナ env に `A=1` があり exec に `A=2` を指定する, when exec の request を組み立てる, then `Env` は上書き済みの `A=2` を含み、指定なしの場合は `Env` を送らない。
-- [ ] Given exit code がバックオフ後も確定できない, when exec が終わる, then 0 を偽らず明示エラーになる。
-- [ ] 既存 CLI 経路の exec テスト（`runtime_wbtest.mbt`）と `smoke` の exec が回帰しない。
+- [x] Given stdout と stderr が frame 単位で交互に届く, when exec 出力を復元する, then stdout/stderr がそれぞれ正しい順序と内容で分離され、混線しない。(`demux_exec_stream` fixture で固定)
+- [ ] Given `exit 7` で stdout と stderr の両方へ出力するコマンド, when exec する, then exit code 7 と両ストリームの出力が復元される。**未実行**（実 daemon 不在。mock daemon で create→start→inspect→demux→exit 7 を検証済み、実 exec 観測は 0020/CI に委譲）
+- [x] Given payload 長 0 の frame、stdin（type 0）frame、未知 type の frame, when demux する, then stdout/stderr に混入せず、後続 frame の処理が継続する。
+- [x] Given ヘッダが受信境界で分割される, when demux する, then frame として正しく再結合される。(受信境界は transport の `read_some` チャンクで吸収 — decoder が任意境界を扱い、demux は全蓄積後に一括処理。upstream と同じ構造)
+- [x] Given 蓄積が 64 MiB を超える出力, when start 応答を読む, then 切り詰めず明示エラーになる（ちょうど 64 MiB は成功）。(`HttpResponseDecoder` 既定 64 MiB 上限 → `BodyTooLarge`; 境界 fixture は 0007 で固定済み)
+- [x] Given raw stream（TTY 有効）の応答, when 解析する, then frame として解釈せず明示エラーになる。(`Content-Type: application/vnd.docker.raw-stream` → `MalformedResponse`。本ライブラリは常に `Tty:false` で start)
+- [x] Given コンテナ env に `A=1` があり exec に `A=2` を指定する, when exec の request を組み立てる, then `Env` は上書き済みの `A=2` を含み、指定なしの場合は `Env` を送らない。(inspect→`merge_exec_env`→送信を wbtest で固定)
+- [x] Given exit code がバックオフ後も確定できない, when exec が終わる, then 0 を偽らず明示エラーになる。(6 試行後も `Running==true` → `ExecExitUndetermined`、upstream の warn+None より厳しい文書化済み判断)
+- [x] 既存 CLI 経路の exec テスト（`runtime_wbtest.mbt`）と `smoke` の exec が回帰しない。(112 tests PASS)
 
 ## テスト計画
 
@@ -98,3 +98,6 @@ Docker Engine API の exec create/start/inspect を直結で実装し、multiple
 - 証跡: multiplexed バイト列 fixture、fake Engine の応答ログ、実機 exec の exit code と分離出力を残す。
 - 非 UTF-8 バイト列の扱いは既存 `ProcessOutput`（String）契約に合わせて wbtest で固定し、黙って置換しない。公開型の変更は 0049 と調整する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。docker_exec.mbt に upstream `exec`/`demux_exec_stream`/`parse_exec_inspect_state`/`EXEC_EXIT_CODE_BACKOFF_MILLIS` を移植。`POST /containers/{id}/exec`（Attach* true、`Env` は非空時のみ）、`POST /exec/{id}/start`（`{"Detach":false,"Tty":false}`、64 MiB 上限、raw-stream Content-Type は `MalformedResponse`）、`GET /exec/{id}/json` を `ENGINE_RETRY_MAX` 回・`Deadline::backoff` で再試行し `Running==false` の `ExitCode` を確定。確定不能時は `ExecExitUndetermined`（upstream warn+None より厳しい、文書化済み）。`ContainerInspect` に `Config.Env` を追加し exec env マージ（inspect→override→送信）に利用。`serve_mock_engine` は request body も消費するよう修正（RST 防止 + body 検査可能化）。moon check --deny-warn PASS、112 tests PASS。実 daemon exec は未実行（CI）。
+- 2026-11-04: exec create/start/inspect + demux implemented
+- 2026-11-04: mock-daemon verified incl. backoff exhaustion; real-daemon exec deferred to CI

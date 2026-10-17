@@ -1,9 +1,9 @@
 # [P0 / M1] Docker Engine API の create/start と request serialization
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M1
@@ -55,14 +55,14 @@ GenericImage の設定を Docker Engine API の create request（JSON）へシ�
 
 ## 受け入れ条件
 
-- [ ] Given イメージが解決済み, when GenericImage の設定で API の create/start を実行する, then 作成 ID のコンテナが running になり、`docker` CLI プロセスが一度も起動しない。
-- [ ] Given `with_cmd`/`with_entrypoint`/`with_env_var`/`with_label`/`with_working_dir`/`with_user`/`with_readonly_rootfs` を設定する, when create request をシリアライズする, then 各設定に対応する member が fixture JSON と一致する。
-- [ ] Given `with_mapped_port` と `with_exposed_port` を設定する, when create request をシリアライズする, then `ExposedPorts` と `HostConfig.PortBindings` が protocol 付きキーで一致し、host port 0 がエフェメラル要求として送られる。
-- [ ] Given 同一 container port を重複指定する, when start を呼ぶ, then pull や create の副作用前にエラーになり、コンテナは作成されない。
-- [ ] Given start が失敗する, when start がエラーを返す, then create で得た ID だけが force remove され、元の start エラーがそのまま呼び出し側へ返る。
-- [ ] Given start 成功後に builder を変更する, when container の port mapping を読む, then start 時点の snapshot が返る（既存契約の維持）。
-- [ ] Given create 応答が `Id` を欠く, when 応答を解析する, then 空 ID で start せず、エラーを返して資源を残さない。
-- [ ] 既存の CLI 経路テストと M0 の orphan 回収（0001）が回帰しない。
+- [ ] Given イメージが解決済み, when GenericImage の設定で API の create/start を実行する, then 作成 ID のコンテナが running になり、`docker` CLI プロセスが一度も起動しない。**未実行**（実 daemon 不在 — mock daemon で create→start の request 列を検証済み、running 確認は 0020 E2E / CI docker ジョブに委譲）
+- [x] Given `with_cmd`/`with_entrypoint`/`with_env_var`/`with_label`/`with_working_dir`/`with_user`/`with_readonly_rootfs` を設定する, when create request をシリアライズする, then 各設定に対応する member が fixture JSON と一致する。(`inspect` fixture で upstream member 順を固定)
+- [x] Given `with_mapped_port` と `with_exposed_port` を設定する, when create request をシリアライズする, then `ExposedPorts` と `HostConfig.PortBindings` が protocol 付きキーで一致し、host port 0 がエフェメラル要求として送られる。(`"80/tcp"` キー、`"HostPort":"0"` を fixture で固定)
+- [x] Given 同一 container port を重複指定する, when start を呼ぶ, then pull や create の副作用前にエラーになり、コンテナは作成されない。(`validate_image_request` が `create_request` 構築時・socket 接続前に `duplicate published container port` で失敗)
+- [x] Given start が失敗する, when start がエラーを返す, then create で得た ID だけが force remove され、元の start エラーがそのまま呼び出し側へ返る。(errdefer rollback が `DELETE /containers/{id}?force=true` を `CLEANUP_BUDGET_MS` で発行し、元の `ServerError` を再送出 — mock で request 列を固定)
+- [x] Given start 成功後に builder を変更する, when container の port mapping を読む, then start 時点の snapshot が返る（既存契約の維持）。(`CreateRequest` が全配列を `copy` し、後続 builder 変更が JSON に混入しないことを wbtest で固定)
+- [x] Given create 応答が `Id` を欠く, when 応答を解析する, then 空 ID で start せず、エラーを返して資源を残さない。(`MalformedResponse`、start 未発行を request log で確認)
+- [x] 既存の CLI 経路テストと M0 の orphan 回収（0001）が回帰しない。(97 tests PASS。`preflight_run` の共有検証を `validate_image_request` に抽出したが CLI 経路の拒否内容は不変)
 
 ## テスト計画
 
@@ -96,3 +96,6 @@ GenericImage の設定を Docker Engine API の create request（JSON）へシ�
 - 証跡: create request の fixture、create/start 応答、rollback 前後の `docker ps -a` をログまたは artifact に残す。
 - 0001 の CLI orphan 回収とは経路が異なるが、「所有を証明できる ID のみ回収する」方針を共有する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。docker_container.mbt に upstream `CreateContainerBody`/`create_container`/`start_container`/`rollback_remove` を移植。`escape_json`/`json_array`/`json_object`（引用符・制御文字・\uXXXX）、`CreateRequest` snapshot 型、`POST /containers/create?name=&platform=`（percent-encode、`Content-Type: application/json`、必須 `Id` 読み取り）、`POST /containers/{id}/start`、`DELETE /containers/{id}?force=true` を追加。`create_and_start` は errdefer で start 失敗時に作成 ID のみ `CLEANUP_BUDGET_MS`・`protect_from_cancel` で force remove（`TESTCONTAINERS_COMMAND=keep` で抑止、upstream と同じ）。`capability.mbt` の CLI/直結共有検証を `validate_image_request` に抽出し、container name 検証を追加。moon check --deny-warn PASS、97 tests PASS。実 daemon での create/start と CLI 非依存の観測は CI に委譲。
+- 2026-11-04: create/start + rollback implemented
+- 2026-11-04: mock-daemon verified; real-daemon create/start deferred to CI

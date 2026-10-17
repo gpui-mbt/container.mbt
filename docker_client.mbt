@@ -77,6 +77,32 @@ fn encode_engine_request(
 }
 
 ///|
+/// RFC 3986 unreserved-only percent encoding (upstream `percent_encode`):
+/// encodes `/`, `:`, `@`, space as `%XX` (never `+`). Used for query
+/// values and embedded path segments like `/images/{name}/json`.
+fn percent_encode(s : String) -> String {
+  let buf = StringBuilder()
+  let hex = "0123456789ABCDEF"
+  for b in @utf8.encode(s) {
+    let c = b.to_int()
+    if (c >= 'A' && c <= 'Z') ||
+      (c >= 'a' && c <= 'z') ||
+      (c >= '0' && c <= '9') ||
+      c == '-' ||
+      c == '_' ||
+      c == '.' ||
+      c == '~' {
+      buf.write_char(c.unsafe_to_char())
+    } else {
+      buf.write_char('%')
+      buf.write_char(hex[c >> 4].unsafe_to_char())
+      buf.write_char(hex[c & 0xF].unsafe_to_char())
+    }
+  }
+  buf.to_string()
+}
+
+///|
 /// Send one request and return the decoded response. Any non-2xx status
 /// is classified into `EngineError` via `classify_engine_error`;
 /// transport/decode failures map via `engine_error_of_failure`.
