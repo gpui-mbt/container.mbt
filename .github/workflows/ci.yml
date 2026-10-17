@@ -28,5 +28,33 @@ jobs:
           docker info
           docker pull alpine:3.20
           moon run smoke --target native
+      - name: Linux direct-API E2E (no docker CLI on PATH)
+        run: |
+          set -e
+          docker pull alpine:3.20
+          docker run -d --name container-mbt-e2e-foreign alpine:3.20 tail -f /dev/null
+          docker ps -a | tee /tmp/ps-before.txt
+          moon build --target native
+          BIN="$(pwd)/_build/native/debug/build/smoke_linux/smoke_linux.exe"
+          # Run the direct-API binary with a PATH that cannot resolve the
+          # docker CLI: only the unix socket path is exercised.
+          env -i PATH=/container-mbt-empty HOME="$HOME" "$BIN" 2>&1 | tee /tmp/e2e-run.log
+          docker ps -a | tee /tmp/ps-after.txt
+          if docker ps -a --format '{{.Names}}' | grep '^container-mbt' | grep -v '^container-mbt-e2e-foreign$'; then
+            echo "leftover container-mbt container found" >&2
+            exit 1
+          fi
+          docker inspect container-mbt-e2e-foreign >/dev/null
+          docker rm -f container-mbt-e2e-foreign
+      - name: Upload direct-API E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-api-e2e
+          path: |
+            /tmp/e2e-run.log
+            /tmp/ps-before.txt
+            /tmp/ps-after.txt
+          if-no-files-found: ignore
       - name: Check Mooncakes package
         run: moon package --list

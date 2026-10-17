@@ -326,9 +326,16 @@ pub async fn GenericImage::start_with_client(
   self : GenericImage,
   client : DockerClient,
 ) -> Container {
+  preflight(DirectDocker, self)
   let deadline = Deadline::after(self.startup_timeout_ms)
+  let attempt = RunAttempt::prepare(self)
+  // Same identity contract as the CLI adapter: the attempt name and the
+  // ownership label let a later run find and collect this run's leavings.
+  let attempt_image = self
+    .with_container_name(attempt.name())
+    .with_label(OWNERSHIP_LABEL, attempt.run_id())
   ignore(client.resolve_or_pull_image(self.descriptor(), deadline~))
-  let id = client.create_and_start(self, deadline~)
+  let id = client.create_and_start(attempt_image, deadline~)
   let container : Container = {
     id,
     runtime: Docker,

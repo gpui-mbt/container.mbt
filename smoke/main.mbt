@@ -1,10 +1,11 @@
 ///|
-/// Exercise the actual Docker Engine through the native CLI adapter.
+/// Exercise the actual Docker Engine through the explicit CLI adapter
+/// (`start_cli` — `start` itself is the direct Engine API since 0019).
 async fn main {
   let image = @container.GenericImage::new("alpine", "3.20")
     .with_cmd(["tail", "-f", "/dev/null"])
     .with_exposed_port(@container.ContainerPort::tcp(80))
-  let container = image.start(@container.Docker)
+  let container = image.start_cli(@container.Docker)
   // Why not strand containers if a later assertion fails or the task is cancelled.
   errdefer (container.rm() catch { _ => () })
   // What: mutations after start must not change the reported host mappings.
@@ -58,7 +59,7 @@ async fn main {
     .with_wait_for(@container.WaitFor::millis(10000))
     .with_startup_timeout(2500)
   let rejected = try {
-    let unexpected = failing_image.start(@container.Docker)
+    let unexpected = failing_image.start_cli(@container.Docker)
     unexpected.rm()
     false
   } catch {
@@ -87,7 +88,7 @@ async fn main {
     .with_container_name(orphan_probe)
     .with_entrypoint("/definitely/missing/container-mbt-binary")
   let run_rejected = try {
-    let unexpected = broken_image.start(@container.Docker)
+    let unexpected = broken_image.start_cli(@container.Docker)
     unexpected.rm()
     false
   } catch {
@@ -129,7 +130,7 @@ async fn main {
     .with_container_name(holder_name)
     .with_cmd(["tail", "-f", "/dev/null"])
   let refused = try {
-    let unexpected = colliding.start(@container.Docker)
+    let unexpected = colliding.start_cli(@container.Docker)
     unexpected.rm()
     false
   } catch {

@@ -310,7 +310,10 @@ async test "direct start routes the whole lifecycle over the socket" {
     wire[0].has_prefix("GET /images/alpine%3A3.20/json") ||
     wire[0].has_prefix("GET /images/alpine:3.20/json"),
   )
-  assert_true(wire[3].has_prefix("POST /containers/create"))
+  assert_true(wire[3].has_prefix("POST /containers/create?name="))
+  // Ownership contract (0001/0020): the direct path stamps the same
+  // container-mbt.owned label the CLI adapter would pass via argv.
+  assert_true(wire[3].contains("container-mbt.owned"))
   assert_true(wire[4].has_prefix("POST /containers/abc123/start"))
   assert_true(wire[6].has_prefix("POST /containers/abc123/stop"))
   assert_true(wire[7].has_prefix("DELETE /containers/abc123"))

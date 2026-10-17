@@ -65,13 +65,13 @@ Docker Engine API 直結（docker CLI 非依存）で pull→create→start→wa
 
 ## 受け入れ条件
 
-- [ ] Given PATH から docker CLI を除いた Linux（docker daemon 稼働）, when `moon run smoke_linux --target native`, then 列挙した手順がすべて完走し exit code 0。
-- [ ] Given 上記実行, when 完了後の `docker ps -a`, then prefix / label 一致のコンテナが 0 件。
-- [ ] Given readiness 失敗 fixture, when start が失敗する, then エラーが返り、その run が作成したコンテナは残っていない。
-- [ ] Given 事前に別プロセスが作成した無関係なコンテナ, when smoke を実行する, then そのコンテナは実行前後で存在したまま。
-- [ ] Given exec の非ゼロ終了, when 呼出が戻る, then exit code と stderr が記録され、cleanup が走る。
-- [ ] Given 実行ログ, when 証跡を確認する, then step ごとの操作種別・対象 ID・結果要約が残り、直結 socket 経由であることが分かる。
-- [ ] Given 既存の CLI smoke（`smoke/`）, when 本変更を追加する, then 既存 CI step は従来どおり PASS する。
+- [ ] Given PATH から docker CLI を除いた Linux（docker daemon 稼働）, when `moon run smoke_linux --target native`, then 列挙した手順がすべて完走し exit code 0。**未実行**（ローカルに daemon なし。CI step `Linux direct-API E2E (no docker CLI on PATH)` が `env -i PATH=/container-mbt-empty` で `_build/.../smoke_linux.exe` を実行 → 次回 CI 実行で採証）
+- [ ] Given 上記実行, when 完了後の `docker ps -a`, then prefix / label 一致のコンテナが 0 件。**未実行**（CI step が `docker ps -a --format '{{.Names}}' | grep '^container-mbt'` の残存ゼロを assert）
+- [ ] Given readiness 失敗 fixture, when start が失敗する, then エラーが返り、その run が作成したコンテナは残っていない。**未実行**（`smoke_linux` の `never-printed` fixture が inspect 404 を assert；mock socket では direct start の rollback errdefer を単体テスト済）
+- [ ] Given 事前に別プロセスが作成した無関係なコンテナ, when smoke を実行する, then そのコンテナは実行前後で存在したまま。**未実行**（CI が `container-mbt-e2e-foreign` を事前起動し、後続 inspect で存続を assert）
+- [ ] Given exec の非ゼロ終了, when 呼出が戻る, then exit code と stderr が記録され、cleanup が走る。**未実行**（`smoke_linux` の `exec-nonzero` step が exit=7/stderr を記録；errdefer が rm -f 相当を実行）
+- [ ] Given 実行ログ, when 証跡を確認する, then step ごとの操作種別・対象 ID・結果要約が残り、直結 socket 経由であることが分かる。**未実行**（`step()` が `[e2e:N] name: detail (ms)` を出力し `/tmp/e2e-run.log` artifact 化；binary は PATH 不在で CLI spawn 不能）
+- [ ] Given 既存の CLI smoke（`smoke/`）, when 本変更を追加する, then 既存 CI step は従来どおり PASS する。**未実行**（smoke を `start_cli` へ明示切替済 — 0019 で `start` は direct 既定のため。CI step 自体は不変）
 
 ## テスト計画
 
@@ -98,3 +98,4 @@ Docker Engine API 直結（docker CLI 非依存）で pull→create→start→wa
 - 証跡要件: `docker ps -a` の前後と各 step のログを artifact に残す（0052 の CI 方針と整合。`issues/README.md` 運用ルール 2）。
 - 本 issue の PASS は 0019 の Linux 廃止条件と 0050 の conformance 基盤の前提になる。0021 は本 smoke の fixture をクラッシュ注入へ拡張する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`smoke_linux/main.mbt` 新設 — `start(Docker)` 直結経路で preflight→pull/create/start/wait→exec（成功＋非ゼロ）→logs→inspect(running/published port)→stop→rm→inspect(404) を step 記録付きで実行し、readiness 失敗 fixture の残存ゼロも assert。`start_with_client` が `RunAttempt` を介して生成名 `?name=` と所有 label `container-mbt.owned=<run-id>` を create に注入するよう修正（CLI 経路との同一契約 — 0019 の残課題）。既存 `smoke/` は `start_cli` に明示切替。CI に PATH 除去実行 step＋証跡 artifact＋foreign container 存続 assert を追加。`moon check --deny-warn` PASS、153 tests PASS、`moon build` で `smoke_linux.exe` 生成確認。実 daemon 実行は本環境不可のため全受け入れ条件は未実行 — CI 初回実行で採証。
