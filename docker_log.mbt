@@ -153,6 +153,10 @@ pub struct DockerLogSession {
   /// Any error that terminated the session (startup classification or
   /// mid-stream failure); `None` for clean EOF/stop.
   priv mut failure : Error?
+  /// Live frame tap for `Container::subscribe_logs` (0040): receives
+  /// each demuxed (stream_type, payload) right after `absorb` buffers
+  /// it. Never suspends — the hook may not block the pump.
+  priv mut on_frame : ((Int32, Bytes) -> Unit)?
 }
 
 ///|
@@ -170,6 +174,7 @@ pub fn DockerLogSession::new(
     stopped: false,
     ended: false,
     failure: None,
+    on_frame: None,
   }
 }
 
@@ -222,7 +227,8 @@ pub fn DockerLogSession::stop(self : DockerLogSession) -> Unit {
 
 ///|
 /// Append demuxed frames to the per-stream buffers; type 0 (stdin) and
-/// unknown types are dropped, matching `demux_exec_stream`.
+/// unknown types are dropped, matching `demux_exec_stream`. A
+/// subscription's `on_frame` hook observes the same frames.
 fn DockerLogSession::absorb(
   self : DockerLogSession,
   frames : Array[(Int32, Bytes)],
@@ -232,6 +238,9 @@ fn DockerLogSession::absorb(
       self.stdout_buf.push(payload)
     } else if ty == 2 {
       self.stderr_buf.push(payload)
+    }
+    if self.on_frame is Some(tap) {
+      tap(ty, payload)
     }
   }
 }

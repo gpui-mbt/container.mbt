@@ -1,5 +1,6 @@
 import {
   "moonbitlang/async",
+  "moonbitlang/async/cond_var",
   "moonbitlang/async/fs",
   "moonbitlang/async/process",
   "moonbitlang/async/raw_fd",

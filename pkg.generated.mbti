@@ -28,6 +28,8 @@ pub const HTTP_WAIT_REQUEST_TIMEOUT_MS : Int = 10_000
 
 pub const LOG_BUFFER_LIMIT : Int = 8388608
 
+pub const LOG_LINE_MAX_BYTES : Int = 8388608
+
 pub const MIN_DOCKER_API_VERSION : String = "1.24"
 
 pub fn build_exec_args(String, Array[String]) -> Array[String]
@@ -159,6 +161,7 @@ pub async fn Container::logs(Self) -> ProcessOutput
 pub async fn Container::rm(Self) -> Unit
 pub fn Container::runtime(Self) -> Runtime
 pub async fn Container::stop(Self) -> Unit
+pub fn Container::subscribe_logs(Self, (LogFrame) -> Unit raise, buffer_limit? : Int64) -> LogSubscription raise
 pub async fn Container::wait_ready(Self, Array[WaitFor], Int) -> Unit
 
 pub struct ContainerInspect {
@@ -390,6 +393,22 @@ pub struct ListedContainer {
   name : String
   owner : String?
 }
+
+pub struct LogFrame {
+  stream : String
+  data : Bytes
+  truncated : Bool
+}
+
+pub struct LogSubscription {
+  // private fields
+}
+pub fn LogSubscription::dropped_bytes(Self) -> Int64
+pub fn LogSubscription::dropped_frames(Self) -> Int64
+pub fn LogSubscription::error(Self) -> Error?
+pub fn LogSubscription::is_ended(Self) -> Bool
+pub async fn LogSubscription::run(Self) -> Unit
+pub async fn LogSubscription::stop(Self) -> Unit
 
 pub enum Mount {
   Bind(String, String, Bool)

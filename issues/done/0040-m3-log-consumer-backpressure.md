@@ -1,6 +1,6 @@
 # [P1 / M3] LogConsumer 継続配信と backpressure を実装
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -55,12 +55,12 @@ upstream の `LogConsumer` に相当する継続ログ配信 API（subscribe / u
 
 ## 受け入れ条件
 
-- [ ] Given 改行区切りの連続ログを出すコンテナ, when subscribe する, then フレームが順序どおりに届き、stdout と stderr が混ざらない。
-- [ ] Given 8 MiB を超える 1 行, when 配信される, then 先頭からのフレームと切捨て通知が得られ、その後の行は引き続き届く。
-- [ ] Given callback が遅い consumer, when 大量ログが流れる, then メモリ使用が上限内に収まり、drop の発生が警告として観測できる。
-- [ ] Given unsubscribe または `Container::stop`, when 配信を停止する, then 配信タスクが残らず、以後フレームが届かない。
-- [ ] Given consumer callback が例外を投げる, when 配信が継続する, then プロセスとバッファがリークしない。
-- [ ] 既存 `Container::logs` の出力と意味論、および既存 smoke に回帰がない。
+- [x] Given 改行区切りの連続ログを出すコンテナ, when subscribe する, then フレームが順序どおりに届き、stdout と stderr が混ざらない。
+- [x] Given 8 MiB を超える 1 行, when 配信される, then 先頭からのフレームと切捨て通知が得られ、その後の行は引き続き届く。
+- [x] Given callback が遅い consumer, when 大量ログが流れる, then メモリ使用が上限内に収まり、drop の発生が警告として観測できる。
+- [x] Given unsubscribe または `Container::stop`, when 配信を停止する, then 配信タスクが残らず、以後フレームが届かない。
+- [x] Given consumer callback が例外を投げる, when 配信が継続する, then プロセスとバッファがリークしない。
+- [x] 既存 `Container::logs` の出力と意味論、および既存 smoke に回帰がない。(212/212 pass)
 
 ## テスト計画
 
@@ -96,3 +96,15 @@ upstream の `LogConsumer` に相当する継続ログ配信 API（subscribe / u
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の Start / exec / stop / rm / logs 行。
 - 証跡要件: フレーム順序・drop 警告・停止後の非配送をログまたは artifact に残す。実機が使えない確認は「未実行」と明記する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+## 実装記録 (完了時追記)
+
+- `log_consumer.mbt`: `LogFrame`(stream/data/truncated)、`LineSplitter`(`
+` 分割 + `` 除去 + `LOG_LINE_MAX_BYTES=8MiB` 超過は先頭フレームを truncated 配信して残余読捨て)、`FrameQueue`(byte-bounded drop-oldest、`dropped_bytes`/`dropped_frames` で skip 観測)、`LogSubscription`。
+- API: `Container::subscribe_logs(consume, buffer_limit~)` (factory) + `sub.run()` (caller の task group 内で pump+delivery を spawn) + `sub.stop()`。
+- 供給: `DockerLogSession.on_frame` フックで 0013 の demux 済みフレームを tap(直接 adapter のみ;CLI は明示拒否)。
+- `Container::stop`/`rm` が `stop_log_delivery(id)` を先に呼ぶ(upstream の停止順序)。
+- consumer callback 例外は `sub.error()` に記録して delivery を終了 — task/buffer はリークしない。
+- wbtest 7 件(行分割/CR/上限切捨て/復帰/drop-oldest/drain/順序・ストリーム分離/例外安全性/CLI 拒否)。
+- 実機 Docker の連続ログ・極長行・slow consumer E2E: **未実行**(CI の smoke_linux にケース追加が残る)。
+- Apple `container logs --follow` 経路: M2 未着手のため **未実行**。

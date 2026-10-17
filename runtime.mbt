@@ -513,6 +513,9 @@ async fn Container::logs_with_timeout(
 /// Stop an owned container without deleting it.
 pub async fn Container::stop(self : Container) -> Unit {
   guard !self.removed else { fail("container already removed") }
+  // Halt live log delivery before touching the runtime (0040,
+  // upstream stop_log_delivery ordering).
+  stop_log_delivery(self.id)
   if self.client is Some(client) {
     return client.stop_container(self.id)
   }
@@ -531,6 +534,7 @@ pub async fn Container::rm(self : Container) -> Unit {
   if self.removed {
     return
   }
+  stop_log_delivery(self.id)
   if self.client is Some(client) {
     client.remove_container(self.id, force=true)
     self.removed = true
