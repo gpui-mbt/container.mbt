@@ -1,9 +1,9 @@
 # [P1 / M0] CLI adapter の非対応設定を副作用前に明示拒否する
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-10-17
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P1
 Milestone: M0
@@ -53,12 +53,12 @@ Docker / Apple Container CLI adapter に runtime 別の capability 表を導入�
 
 ## 受け入れ条件
 
-- [ ] Given Apple runtime と SCTP mapping, when `start` する, then run が spawn されず、SCTP 非対応を示す明示エラーが返る。
-- [ ] Given Apple runtime と host port 0（`with_exposed_port`）, when `start` する, then run 前に明示エラーになる。
-- [ ] Given 同一 container port の重複 mapping（Docker / Apple 双方）, when `start` する, then 片方が黙って消えず明示エラーになる。
-- [ ] Given capability 表で「未確認」の設定（例: Apple の `--network`）, when `start` する, then 引数へ黙って渡さず明示エラーになる（表の許可根拠がある項目だけ適用）。
-- [ ] Given 既存 smoke と同じ設定, when `build_run_args` で引数を組み立てる, then 既存の期待 argv（[commands_wbtest.mbt](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/commands_wbtest.mbt) / [image_wbtest.mbt](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/image_wbtest.mbt) の固定）を変えない。
-- [ ] Given runtime 別の負の契約テスト, when `moon test --target native` を実行する, then PASS する。
+- [x] Given Apple runtime と SCTP mapping, when `start` する, then run が spawn されず、SCTP 非対応を示す明示エラーが返る。（`preflight_run` で "SCTP port publishing is not supported on Apple container" を送出。wbtest「Apple rejects SCTP port publication」PASS）
+- [x] Given Apple runtime と host port 0（`with_exposed_port`）, when `start` する, then run 前に明示エラーになる。（wbtest「Apple rejects an ephemeral host port」PASS）
+- [x] Given 同一 container port の重複 mapping（Docker / Apple 双方）, when `start` する, then 片方が黙って消えず明示エラーになる。（wbtest「duplicate container ports are rejected on both runtimes」PASS。同 host port 重複も両 runtime で拒否）
+- [x] Given capability 表で「未確認」の設定（例: Apple の `--network`）, when `start` する, then 引数へ黙って渡さず明示エラーになる（表の許可根拠がある項目だけ適用）。（`--network` / `--platform` / `--user` / `--mount` / `--read-only` を Apple で明示拒否。wbtest「unverified Apple settings are refused before spawning」PASS）
+- [x] Given 既存 smoke と同じ設定, when `build_run_args` で引数を組み立てる, then 既存の期待 argv（[commands_wbtest.mbt](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/commands_wbtest.mbt) / [image_wbtest.mbt](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/image_wbtest.mbt) の固定）を変えない。（0001 で追加された `--name` / `--label` は維持しつつ、golden argv テスト PASS）
+- [x] Given runtime 別の負の契約テスト, when `moon test --target native` を実行する, then PASS する。（34 件 PASS。`build_run_args` は純粋関数のため spawn なしで拒否を検証）
 
 ## テスト計画
 
@@ -84,7 +84,11 @@ Docker / Apple Container CLI adapter に runtime 別の capability 表を導入�
 
 ## 注記
 
+- 2026-10-17: 実装着手: capability.mbt に runtime×設定の preflight 判定を集約し、Apple 未確認設定は明示拒否する
+- 2026-10-17: 実装完了: `capability.mbt` に `preflight_run` を新設し、`build_run_args` の検証を集約。Apple で未確認の `--network` / `--platform` / `--user` / `--mount` / `--read-only` は明示拒否（実機確認は 0002 のセッションで行い、確認済み項目へ随時格上げ）。Apple で適用としたのは `--name` / cmd / `--entrypoint` / `--workdir` / `--env` / `--label` / 固定 `--publish`(tcp,udp) / log・duration 系 WaitFor で、smoke_apple の argv と upstream CLI 対応を根拠に採用。`container run --label` は 0001 の所有 label 伝播に必須のため、0002 で実機確認すること。host port の重複拒否は両 runtime に追加。検証: `moon check --target native --deny-warn` PASS、`moon test --target native` 34 件 PASS。Docker 実機回帰（smoke）は daemon が必要で未実行（CI docker ジョブで確認）。
 - upstream 参照: `linux_unsupported_request_reason`（async_runner.rs）、`reject_sctp_ports` / `normalize_platform` / `allocate_unique_free_host_port`（container_cfg.rs）、`reject_duplicate_mapped_ports`（containers/request.rs）。
 - 0005 が本 issue の拒否契約を回帰テストとして固定し、0002 の実機セッションで未確認項目を確定する。
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-10-17: 実装着手: capability.mbt に runtime×設定の preflight 判定を集約し、Apple 未確認設定は明示拒否する
+- 2026-10-17: capability.mbt の preflight_run に検証を集約し Apple 未確認設定を明示拒否。34 tests PASS。Docker 実機 smoke は daemon 必須のため未実行（CI で確認）

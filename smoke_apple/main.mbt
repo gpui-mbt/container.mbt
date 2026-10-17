@@ -1,6 +1,6 @@
 ///|
 /// Apple Container CLI E2E. Run only on a physical macOS 26 Apple Silicon host.
-async fn main raise {
+async fn main {
   let name = "container-mbt-apple-\{@async.now()}"
   let image = @container.GenericImage::new("alpine", "3.20")
     .with_container_name(name)
@@ -10,9 +10,7 @@ async fn main raise {
     .with_startup_timeout(60000)
   let container = image.start(@container.AppleContainer)
   // Why not retain a newly created VM after a failed assertion.
-  errdefer {
-    container.rm() catch { _ => () }
-  }
+  errdefer (container.rm() catch { _ => () })
   // What: the CLI returns the fixed port rather than a fabricated dynamic port.
   guard container.get_host_port_ipv4(@container.ContainerPort::tcp(80)) == 18080 else {
     fail("Apple Container reported an unexpected fixed host port")

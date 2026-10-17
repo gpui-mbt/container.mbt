@@ -1,9 +1,9 @@
 # [P1 / M0] CLI 起動・readiness・cleanup の回帰テストを固定する
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-10-17
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P1
 Milestone: M0
@@ -57,12 +57,12 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given 既存 4 本 + 追加した wbtest, when `moon test --target native` を実行する, then すべて PASS する。
-- [ ] Given start 前から deadline を消費した状態, when readiness 条件が続く, then 予算が延長されない（既存テストの維持）。
-- [ ] Given readiness 失敗と run 失敗の両経路, then rollback が起動 deadline と別の有界予算で実行され、元の run エラーを上書きしない。
-- [ ] Given 無関係な既存コンテナ, when 回収テストを実行する, then 削除されない。
-- [ ] Given Docker 実機（CI の docker ジョブ）, when `moon run smoke --target native` を実行する, then 既存の `Docker lifecycle E2E PASS` と追加した失敗注入ケースが PASS する。
-- [ ] Given 0004 の拒否契約, when wbtest を実行する, then runtime 別の拒否が PASS する。
+- [x] Given 既存 4 本 + 追加した wbtest, when `moon test --target native` を実行する, then すべて PASS する。（35 件 PASS: 既存維持 + `run_attempt_wbtest.mbt` 9 件 + `capability_wbtest.mbt` 7 件）
+- [x] Given start 前から deadline を消費した状態, when readiness 条件が続く, then 予算が延長されない（既存テストの維持）。（runtime_wbtest の共有 deadline 4 件すべて PASS）
+- [x] Given readiness 失敗と run 失敗の両経路, then rollback が起動 deadline と別の有界予算で実行され、元の run エラーを上書きしない。（wbtest「cleanup budget is independent of any expired startup deadline」PASS。回収は `collect_attempt` の独立 budget_ms で実行、元エラーは非ゼロ経路では rollback 注記付きで、timeout/取消経路では再送出）
+- [x] Given 無関係な既存コンテナ, when 回収テストを実行する, then 削除されない。（fixture 実行ファイルで label 不一致時に rm 不発火を確認 PASS）
+- [ ] Given Docker 実機（CI の docker ジョブ）, when `moon run smoke --target native` を実行する, then 既存の `Docker lifecycle E2E PASS` と追加した失敗注入ケースが PASS する。（未実行: 実 Docker daemon 必須。`smoke/main.mbt` に不正 entrypoint 故障注入と name 衝突事前拒否・既存コンテナ生存確認を追加済み）
+- [x] Given 0004 の拒否契約, when wbtest を実行する, then runtime 別の拒否が PASS する。（`capability_wbtest.mbt` で SCTP / host port 0 / 重複 port / Apple 未確認設定の runtime 別拒否を固定）
 
 ## テスト計画
 
@@ -89,3 +89,5 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 - 関連: [runtime_wbtest.mbt](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/runtime_wbtest.mbt)、[smoke/main.mbt](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/smoke/main.mbt)、[docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。
 - issues/README.md の運用ルール 2 / 5 に従い、PASS / FAIL / 未実行を混同せず、生成した name に限定して掃除する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-10-17: 実装着手: 0001/0004 で追加した回帰テストに加え、cleanup 予算の deadline 独立性を wbtest で固定
+- 2026-10-17: wbtest 35件 PASS で 0001/0004 の契約を固定。smoke の故障注入は実 daemon 必須のため未実行（CI で検証）

@@ -26,26 +26,20 @@ pub async fn detect_runtime() -> Runtime {
 }
 
 ///|
-/// Validate user input before an operation with side effects.
-pub fn build_run_args(runtime : Runtime, image : GenericImage) -> Array[String] raise {
-  if image.container_name is Some(name) {
-    guard valid_container_name(name) else {
-      fail("invalid container name: must be 2..63 ASCII characters and begin with an alphanumeric")
-    }
-  }
-  guard image.startup_timeout_ms > 0 else { fail("invalid startup timeout") }
-  for condition in image.ready_conditions {
-    match condition {
-      Nothing | MessageOnStdout(_) | MessageOnStderr(_) | MessageOnEither(_) => ()
-      Millis(ms) => if ms < 0 { fail("wait duration must not be negative") }
-      Healthcheck | Exit => fail("healthcheck and exit waits are not yet supported by the CLI adapters")
-    }
-  }
+/// Validate user input before an operation with side effects. The attempt
+/// supplies the effective `--name` and the ownership label that lets a failed
+/// run find and remove exactly the container it may have created.
+pub fn build_run_args(
+  runtime : Runtime,
+  image : GenericImage,
+  attempt~ : RunAttempt,
+) -> Array[String] raise {
+  // Why not let an unsupported or contradictory request reach the runtime:
+  // every validation lives in the preflight table before a process spawns.
+  preflight_run(runtime, image)
   let args : Array[String] = ["run", "--detach"]
-  if image.container_name is Some(name) {
-    args.push("--name")
-    args.push(name)
-  }
+  args.push("--name")
+  args.push(attempt.name())
   if image.entrypoint is Some(entrypoint) {
     args.push("--entrypoint")
     args.push(entrypoint)
@@ -70,32 +64,16 @@ pub fn build_run_args(runtime : Runtime, image : GenericImage) -> Array[String] 
     args.push("--read-only")
   }
   for (key, value) in image.env_vars {
-    guard key != "" && !key.contains("=") else { fail("invalid environment key") }
     args.push("--env")
     args.push("\{key}=\{value}")
   }
   for (key, value) in image.labels {
-    guard key != "" && !key.contains("=") else { fail("invalid label key") }
     args.push("--label")
     args.push("\{key}=\{value}")
   }
-  let seen : Array[ContainerPort] = []
+  args.push("--label")
+  args.push("\{OWNERSHIP_LABEL}=\{attempt.run_id()}")
   for mapping in image.mappings {
-    for prior in seen {
-      guard !same_port(prior, mapping.container_port()) else {
-        fail("duplicate published container port: \{prior.as_string()}")
-      }
-    }
-    let port = mapping.container_port()
-    if runtime is AppleContainer {
-      guard mapping.host_port() != 0 else {
-        fail("automatic host port assignment is not yet verified on Apple Container; use with_mapped_port")
-      }
-      guard port.protocol_name() != "sctp" else {
-        fail("Apple Container does not support SCTP publication")
-      }
-    }
-    seen.push(port)
     args.push("--publish")
     args.push(mapping.as_publish_argument())
   }
@@ -105,19 +83,8 @@ pub fn build_run_args(runtime : Runtime, image : GenericImage) -> Array[String] 
       Volume(src, dst, ro) => ("volume", src, dst, ro)
       Tmpfs(dst) => ("tmpfs", "", dst, false)
     }
-    guard destination.has_prefix("/") && !destination.contains(",") &&
-      !destination.contains("=") else {
-      fail("mount target must be an absolute path without commas or equals signs")
-    }
-    guard !source.contains(",") && !source.contains("=") else {
-      fail("mount source cannot contain commas or equals signs")
-    }
     let mut option = "type=\{kind},target=\{destination}"
     if kind != "tmpfs" {
-      guard source != "" else { fail("mount source must not be empty") }
-      if kind == "bind" {
-        guard source.has_prefix("/") else { fail("bind source must be absolute") }
-      }
       option = option + ",source=\{source}"
     }
     if is_read_only {
@@ -136,6 +103,13 @@ pub fn build_run_args(runtime : Runtime, image : GenericImage) -> Array[String] 
 ///|
 pub fn build_stop_args(id : String) -> Array[String] {
   ["stop", id]
+}
+
+///|
+/// Both CLI adapters expose `inspect <name>`; the cleanup path checks the raw
+/// output for the ownership run identifier.
+pub fn build_inspect_args(name : String) -> Array[String] {
+  ["inspect", name]
 }
 
 ///|

@@ -20,16 +20,16 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 
 ### M0 — CLI M0 受入・安全性 (5件)
 
-- [ ] [0001 CLI run が ID を返す前に失敗した場合の orphan 回収](./polished/0001-m0-run-failure-orphan-cleanup.md) — P0
+- [x] [0001 CLI run が ID を返す前に失敗した場合の orphan 回収](./done/0001-m0-run-failure-orphan-cleanup.md) — P0
 - [ ] [0002 Apple Silicon 実機で M0 CLI smoke を完走する](./polished/0002-m0-apple-cli-physical-e2e.md) — P0 / deps: 0001
 - [ ] [0003 Apple CLI 固定 published port の TCP 到達を検証](./polished/0003-m0-apple-host-tcp-forwarding.md) — P1 / deps: 0002
-- [ ] [0004 CLI adapter の非対応設定を副作用前に明示拒否する](./polished/0004-m0-runtime-option-preflight.md) — P1
-- [ ] [0005 CLI 起動・readiness・cleanup の回帰テストを固定する](./polished/0005-m0-cli-lifecycle-regression.md) — P1 / deps: 0001
+- [x] [0004 CLI adapter の非対応設定を副作用前に明示拒否する](./done/0004-m0-runtime-option-preflight.md) — P1
+- [x] [0005 CLI 起動・readiness・cleanup の回帰テストを固定する](./done/0005-m0-cli-lifecycle-regression.md) — P1 / deps: 0001
 
 ### M1 — Linux Docker Engine 直接接続 (17件)
 
-- [ ] [0006 Node/Rust に依存しない Docker Unix socket transport](./polished/0006-m1-docker-unix-socket-transport.md) — P0
-- [ ] [0007 Docker HTTP/1.1 応答・chunked・stream decoder を実装](./polished/0007-m1-docker-http-framing-parser.md) — P0 / deps: 0006
+- [x] [0006 Node/Rust に依存しない Docker Unix socket transport](./done/0006-m1-docker-unix-socket-transport.md) — P0
+- [x] [0007 Docker HTTP/1.1 応答・chunked・stream decoder を実装](./done/0007-m1-docker-http-framing-parser.md) — P0 / deps: 0006
 - [ ] [0008 Docker API version・daemon readiness の判定を追加](./polished/0008-m1-docker-daemon-version-preflight.md) — P1 / deps: 0006, 0007
 - [ ] [0009 Docker Engine API の image pull と progress/error を実装](./polished/0009-m1-native-image-pull.md) — P0 / deps: 0006, 0007
 - [ ] [0010 Docker Engine API の create/start と request serialization](./polished/0010-m1-docker-create-start.md) — P0 / deps: 0006, 0007, 0009
@@ -39,8 +39,8 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [ ] [0014 Docker の動的 host port を IPv4/IPv6 inspect で解決](./polished/0014-m1-dynamic-published-ports.md) — P0 / deps: 0011
 - [ ] [0015 Container bridge IP と network 情報を正規化](./polished/0015-m1-bridge-ip-inspection.md) — P1 / deps: 0011
 - [ ] [0016 Docker registry 認証と秘密情報保護](./polished/0016-m1-registry-auth-config.md) — P1 / deps: 0009
-- [ ] [0017 Docker API ステータスと失敗分類を実装](./polished/0017-m1-engine-http-errors.md) — P1 / deps: 0007
-- [ ] [0018 Engine transport の deadline・取消・再試行を一元化](./polished/0018-m1-engine-deadline-cancel.md) — P0 / deps: 0006, 0007
+- [x] [0017 Docker API ステータスと失敗分類を実装](./done/0017-m1-engine-http-errors.md) — P1 / deps: 0007
+- [x] [0018 Engine transport の deadline・取消・再試行を一元化](./done/0018-m1-engine-deadline-cancel.md) — P0 / deps: 0006, 0007
 - [ ] [0019 CLI と直結 API の移行方針・capability gate](./polished/0019-m1-cli-adapter-migration-policy.md) — P1 / deps: 0010
 - [ ] [0020 Linux daemon 直結の起動から削除までの E2E](./polished/0020-m1-linux-native-e2e.md) — P0 / deps: 0010, 0011, 0012, 0013, 0014, 0018
 - [ ] [0021 Linux でプロセスクラッシュ後の残存検出と限定回収](./polished/0021-m1-linux-process-crash-recovery.md) — P1 / deps: 0020

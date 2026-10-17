@@ -1,0 +1,301 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gpui-mbt/container"
+
+import {
+  "moonbitlang/async/raw_fd",
+}
+
+// Values
+pub const CLEANUP_BUDGET_MS : Int = 5000
+
+pub const DEFAULT_DOCKER_SOCKET_PATH : String = "/var/run/docker.sock"
+
+pub const ENGINE_RETRY_MAX : Int = 6
+
+pub const HTTP_RESPONSE_BODY_LIMIT : Int = 67108864
+
+pub const MIN_DOCKER_API_VERSION : String = "1.24"
+
+pub fn build_exec_args(String, Array[String]) -> Array[String]
+
+pub fn build_inspect_args(String) -> Array[String]
+
+pub fn build_remove_args(Runtime, String) -> Array[String]
+
+pub fn build_run_args(Runtime, GenericImage, attempt~ : RunAttempt) -> Array[String] raise
+
+pub fn build_stop_args(String) -> Array[String]
+
+pub fn classify_engine_error(op~ : String, context~ : EngineOp, status~ : Int, body~ : Bytes, target? : String, path? : String) -> EngineError
+
+pub async fn detect_runtime() -> Runtime
+
+pub fn engine_error_of_failure(op~ : String, Error) -> EngineError
+
+pub fn unix_accept(Int) -> Int? raise
+
+pub fn unix_close_fd(Int) -> Unit raise
+
+pub fn unix_listen(String, backlog? : Int) -> Int raise
+
+pub async fn unix_socket_from_fd(Int) -> UnixSocket
+
+pub fn unix_socketpair() -> (Int, Int) raise
+
+// Errors
+pub(all) suberror EngineError {
+  ImageNotFound(op~ : String, image~ : String)
+  ContainerNotFound(op~ : String, container~ : String)
+  ContainerPathNotFound(op~ : String, container~ : String, path~ : String)
+  BadRequest(op~ : String, message~ : String)
+  Unauthorized(op~ : String, message~ : String)
+  Forbidden(op~ : String, message~ : String)
+  Conflict(op~ : String, message~ : String)
+  ServerError(op~ : String, status~ : Int, message~ : String)
+  UnexpectedStatus(op~ : String, status~ : Int, message~ : String)
+  MalformedResponse(op~ : String, detail~ : String)
+  BodyTooLarge(op~ : String, limit~ : Int)
+  TransportError(op~ : String, detail~ : String)
+  ApiVersionTooOld(op~ : String, found~ : String, required~ : String)
+  DeadlineExceeded(op~ : String)
+}
+pub fn EngineError::describe(Self) -> String
+pub fn EngineError::output(Self, &Logger) -> Unit
+pub fn EngineError::to_string(Self) -> String
+pub impl Show for EngineError
+
+pub(all) suberror HttpDecodeError {
+  MalformedStatusLine(String)
+  MalformedHeader(String)
+  HeadTooLarge
+  TooManyHeaders
+  InvalidChunkSize(String)
+  InconsistentContentLength
+  BodyTooLarge(Int)
+  Truncated(String)
+  TrailingData
+  IncompleteResponse
+}
+pub fn HttpDecodeError::output(Self, &Logger) -> Unit
+pub fn HttpDecodeError::to_string(Self) -> String
+pub impl Show for HttpDecodeError
+
+pub(all) suberror SocketConnectError {
+  SocketMissing(String)
+  PermissionDenied(String)
+  Refused(String)
+  Timeout(String)
+  ConnectFailed(Int, String)
+}
+pub fn SocketConnectError::output(Self, &Logger) -> Unit
+pub fn SocketConnectError::to_string(Self) -> String
+pub impl Show for SocketConnectError
+
+// Types and methods
+pub struct Container {
+  id : String
+  runtime : Runtime
+  mappings : Array[PortMapping]
+  mut removed : Bool
+}
+pub async fn Container::exec(Self, Array[String]) -> ProcessOutput
+pub fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int raise
+pub fn Container::id(Self) -> String
+pub async fn Container::logs(Self) -> ProcessOutput
+pub async fn Container::rm(Self) -> Unit
+pub fn Container::runtime(Self) -> Runtime
+pub async fn Container::stop(Self) -> Unit
+pub async fn Container::wait_ready(Self, Array[WaitFor], Int) -> Unit
+
+pub struct ContainerPort {
+  number : Int
+  protocol : Protocol
+}
+pub fn ContainerPort::as_string(Self) -> String
+pub fn ContainerPort::new(Int, Protocol) -> Self raise
+pub fn ContainerPort::number(Self) -> Int
+pub fn ContainerPort::protocol_name(Self) -> String
+pub fn ContainerPort::sctp(Int) -> Self raise
+pub fn ContainerPort::tcp(Int) -> Self raise
+pub fn ContainerPort::udp(Int) -> Self raise
+
+pub struct DaemonVersion {
+  api_version : String
+  version : String
+}
+
+pub struct Deadline {
+  at_ms : Int64
+}
+pub fn Deadline::after(Int) -> Self
+pub fn Deadline::at(Int64) -> Self
+pub async fn Deadline::backoff(Self, op~ : String, Int) -> Unit
+pub fn Deadline::expired(Self) -> Bool
+pub fn Deadline::remaining_ms(Self) -> Int64
+pub async fn[X] Deadline::run(Self, op~ : String, async () -> X) -> X
+pub async fn Deadline::sleep_bounded(Self, op~ : String, Int) -> Unit
+
+pub struct DockerClient {
+  transport : UnixSocketTransport
+}
+pub fn DockerClient::new(socket_path? : String, connect_timeout_ms? : Int) -> Self
+pub async fn DockerClient::ping(Self, deadline? : Deadline) -> Unit
+pub async fn DockerClient::preflight(Self, min_api? : String, deadline? : Deadline) -> DaemonVersion
+pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, deadline? : Deadline) -> HttpResponse
+pub async fn DockerClient::version(Self, deadline? : Deadline) -> DaemonVersion
+
+pub enum EngineOp {
+  ResolveImage
+  ContainerLifecycle
+  Archive
+}
+pub fn EngineOp::archive() -> Self
+pub fn EngineOp::container_lifecycle() -> Self
+pub fn EngineOp::resolve_image() -> Self
+
+pub struct GenericImage {
+  name : String
+  tag : String
+  mut command : Array[String]
+  mut entrypoint : String?
+  mut container_name : String?
+  mut env_vars : Array[(String, String)]
+  mut labels : Array[(String, String)]
+  mappings : Array[PortMapping]
+  mounts : Array[Mount]
+  ready_conditions : Array[WaitFor]
+  mut startup_timeout_ms : Int
+  mut working_dir : String?
+  mut user : String?
+  mut network : String?
+  mut platform : String?
+  mut readonly_rootfs : Bool
+}
+pub fn GenericImage::descriptor(Self) -> String
+pub fn GenericImage::mappings(Self) -> Array[PortMapping]
+pub fn GenericImage::new(String, String) -> Self raise
+pub fn GenericImage::ready_conditions(Self) -> Array[WaitFor]
+pub async fn GenericImage::start(Self, Runtime) -> Container
+pub async fn GenericImage::start_detected(Self) -> Container
+pub fn GenericImage::with_cmd(Self, Array[String]) -> Self
+pub fn GenericImage::with_container_name(Self, String) -> Self
+pub fn GenericImage::with_entrypoint(Self, String) -> Self
+pub fn GenericImage::with_env_var(Self, String, String) -> Self
+pub fn GenericImage::with_exposed_port(Self, ContainerPort) -> Self raise
+pub fn GenericImage::with_label(Self, String, String) -> Self
+pub fn GenericImage::with_mapped_port(Self, Int, ContainerPort) -> Self raise
+pub fn GenericImage::with_mount(Self, Mount) -> Self
+pub fn GenericImage::with_network(Self, String) -> Self
+pub fn GenericImage::with_platform(Self, String) -> Self
+pub fn GenericImage::with_readonly_rootfs(Self, Bool) -> Self
+pub fn GenericImage::with_startup_timeout(Self, Int) -> Self raise
+pub fn GenericImage::with_user(Self, String) -> Self
+pub fn GenericImage::with_wait_for(Self, WaitFor) -> Self
+pub fn GenericImage::with_working_dir(Self, String) -> Self
+
+pub struct HttpResponse {
+  status : Int
+  reason : String
+  headers : Array[(String, String)]
+  body : Bytes
+}
+
+pub struct HttpResponseDecoder {
+  max_body : Int
+  // private fields
+}
+pub fn HttpResponseDecoder::eof(Self) -> Unit raise HttpDecodeError
+pub fn HttpResponseDecoder::feed(Self, Bytes) -> Unit raise HttpDecodeError
+pub fn HttpResponseDecoder::is_complete(Self) -> Bool
+pub fn HttpResponseDecoder::new(max_body? : Int) -> Self
+pub fn HttpResponseDecoder::response(Self) -> HttpResponse raise HttpDecodeError
+
+pub enum Mount {
+  Bind(String, String, Bool)
+  Volume(String, String, Bool)
+  Tmpfs(String)
+}
+pub fn Mount::bind_mount(String, String) -> Self
+pub fn Mount::tmpfs_mount(String) -> Self
+pub fn Mount::volume_mount(String, String) -> Self
+pub fn Mount::with_read_only(Self) -> Self
+
+pub struct PortMapping {
+  host_port : Int
+  container_port : ContainerPort
+}
+pub fn PortMapping::as_publish_argument(Self) -> String
+pub fn PortMapping::container_port(Self) -> ContainerPort
+pub fn PortMapping::host_port(Self) -> Int
+pub fn PortMapping::new(Int, ContainerPort) -> Self raise
+
+pub struct ProcessOutput {
+  exit_code : Int
+  stdout : String
+  stderr : String
+}
+pub fn ProcessOutput::exit_code(Self) -> Int
+pub fn ProcessOutput::stderr(Self) -> String
+pub fn ProcessOutput::stdout(Self) -> String
+
+pub enum Protocol {
+  Tcp
+  Udp
+  Sctp
+}
+
+pub struct RunAttempt {
+  name : String
+  run_id : String
+  user_named : Bool
+}
+pub fn RunAttempt::name(Self) -> String
+pub fn RunAttempt::prepare(GenericImage) -> Self raise
+pub fn RunAttempt::run_id(Self) -> String
+pub fn RunAttempt::user_named(Self) -> Bool
+
+pub(all) enum Runtime {
+  Docker
+  AppleContainer
+}
+pub fn Runtime::executable(Self) -> String
+
+pub struct UnixSocket {
+  stream : @raw_fd.RawFdStream
+}
+pub fn UnixSocket::close(Self) -> Unit
+pub async fn UnixSocket::read_all(Self) -> Bytes
+pub async fn UnixSocket::read_exactly(Self, Int) -> Bytes
+pub async fn UnixSocket::read_some(Self, max_len? : Int) -> Bytes?
+pub async fn UnixSocket::read_until(Self, StringView) -> String?
+pub async fn UnixSocket::write_all(Self, Bytes) -> Unit
+
+pub struct UnixSocketTransport {
+  socket_path : String
+  connect_timeout_ms : Int
+}
+pub async fn UnixSocketTransport::connect(Self) -> UnixSocket
+pub async fn UnixSocketTransport::exchange(Self, Bytes) -> Bytes
+pub fn UnixSocketTransport::new(socket_path? : String, connect_timeout_ms? : Int) -> Self
+
+pub enum WaitFor {
+  Nothing
+  Millis(Int)
+  MessageOnStdout(String)
+  MessageOnStderr(String)
+  MessageOnEither(String)
+  Healthcheck
+  Exit
+}
+pub fn WaitFor::healthcheck() -> Self
+pub fn WaitFor::message_on_either_std(String) -> Self
+pub fn WaitFor::message_on_stderr(String) -> Self
+pub fn WaitFor::message_on_stdout(String) -> Self
+pub fn WaitFor::millis(Int) -> Self
+pub fn WaitFor::nothing() -> Self
+pub fn WaitFor::seconds(Int) -> Self
+pub fn WaitFor::when_exited() -> Self
+
+// Type aliases
+
+// Traits

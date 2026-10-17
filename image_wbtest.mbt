@@ -22,8 +22,22 @@ test "environment overrides are last-wins" {
 
 ///|
 test "image reference must be nonempty" {
-  assert_true(try { ignore(GenericImage::new("", "latest")); false } catch { _ => true })
-  assert_true(try { ignore(GenericImage::new("alpine", "")); false } catch { _ => true })
+  assert_true(
+    try {
+      ignore(GenericImage::new("", "latest"))
+      false
+    } catch {
+      _ => true
+    },
+  )
+  assert_true(
+    try {
+      ignore(GenericImage::new("alpine", ""))
+      false
+    } catch {
+      _ => true
+    },
+  )
 }
 
 ///|

@@ -1,7 +1,18 @@
 import {
   "moonbitlang/async",
   "moonbitlang/async/process",
+  "moonbitlang/async/raw_fd",
   "moonbitlang/async/shell",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
 }
 
+import {
+  "moonbitlang/async/fs",
+} for "wbtest"
+
 supported_targets = "+native"
+
+options(
+  "native-stub": [ "unix_transport.c" ],
+)

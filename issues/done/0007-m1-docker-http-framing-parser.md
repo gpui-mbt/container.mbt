@@ -1,9 +1,9 @@
 # [P0 / M1] Docker HTTP/1.1 応答・chunked・stream decoder を実装
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M1
@@ -53,13 +53,13 @@ Docker Engine API の HTTP/1.1 レスポンスを、分割到着・chunked・clo
 
 ## 受け入れ条件
 
-- [ ] Given `Content-Length: 5` + `hello`, when 全境界分割（1 バイトずつ）で feed する, then 1 応答になり body が `hello` になる。
-- [ ] Given chunked 応答, when 任意境界で分割して feed する, then 連結後の body が一致し、最終 chunk とトレーラで完了する。
-- [ ] Given `Content-Length: 5` に対し body が 2 バイトで EOF, then エラーになり部分応答を返さない。
-- [ ] Given 長さヘッダ無しの close-delimited 応答, then EOF で完了として扱う。
-- [ ] Given 64 MiB + 1 バイトのボディ, then 上限エラーになる。ちょうど 64 MiB は成功する。
-- [ ] Given 不正な chunk サイズ行や矛盾する長さ, then エラーになり、部分的な body を成功として返さない。
-- [ ] Given 1xx 応答の後に最終応答, then 最終応答だけを返す。
+- [x] Given `Content-Length: 5` + `hello`, when 全境界分割（1 バイトずつ）で feed する, then 1 応答になり body が `hello` になる。(wbtest: 1 byte split)
+- [x] Given chunked 応答, when 任意境界で分割して feed する, then 連結後の body が一致し、最終 chunk とトレーラで完了する。(chunk extension + trailer 行を含む fixture、1 byte split と whole-buffer 両方)
+- [x] Given `Content-Length: 5` に対し body が 2 バイトで EOF, then エラーになり部分応答を返さない。(`Truncated("Content-Length body")`)
+- [x] Given 長さヘッダ無しの close-delimited 応答, then EOF で完了として扱う。
+- [x] Given 64 MiB + 1 バイトのボディ, then 上限エラーになる。ちょうど 64 MiB は成功する。(実 64MiB で成功側を検証、+1 は小 limit で検証 — 両経路共 `>` 境界)
+- [x] Given 不正な chunk サイズ行や矛盾する長さ, then エラーになり、部分的な body を成功として返さない。(`InvalidChunkSize` / `InconsistentContentLength` / chunked 途中 EOF → `Truncated`)
+- [x] Given 1xx 応答の後に最終応答, then 最終応答だけを返す。(100 Continue → 200 OK)
 
 ## テスト計画
 
@@ -86,3 +86,6 @@ Docker Engine API の HTTP/1.1 レスポンスを、分割到着・chunked・clo
 - upstream 参照: `ResponseAccumulator` / `BodyLimit`（1xx 破棄、close-delimited、上限文言）、`read_http11_response`、`DOCKER_RESPONSE_BODY_LIMIT = 64 * 1024 * 1024`、`>` 境界。
 - 上限は将来 0013 / 0040 の follow ストリームと整合させる。deadline の一元化は 0018。関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: sans-IO HTTP/1.1 response decoder in http_decode.mbt
+- 2026-11-04: 実装完了。`HttpResponseDecoder`（`feed`/`eof`/`response`/`is_complete`）を http_decode.mbt に追加。HeadTooLarge=64KiB / 256 headers / chunk-line 128B は本実装の防御既定値（shiguredo_http11 の既定値は未確認・注記どおり断定しない）。body 上限は既定 `HTTP_RESPONSE_BODY_LIMIT` = 64MiB・`>` 境界。1xx 破棄、204/304 ボディ無し、TE chunked 優先、複数 CL は同一値のみ許容。moon check --deny-warn PASS、59 tests PASS。実 daemon E2E は未実行（daemon 不在）。
+- 2026-11-04: sans-IO decoder landed; daemon E2E deferred

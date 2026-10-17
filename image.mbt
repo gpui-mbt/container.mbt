@@ -35,7 +35,7 @@ pub fn Mount::with_read_only(self : Mount) -> Mount {
 /// are rejected before invoking the container runtime.
 pub enum WaitFor {
   Nothing
-  Millis(Int)
+  Millis(Int32)
   MessageOnStdout(String)
   MessageOnStderr(String)
   MessageOnEither(String)
@@ -61,12 +61,12 @@ pub fn WaitFor::when_exited() -> WaitFor {
 }
 
 ///|
-pub fn WaitFor::millis(milliseconds : Int) -> WaitFor {
+pub fn WaitFor::millis(milliseconds : Int32) -> WaitFor {
   Millis(milliseconds)
 }
 
 ///|
-pub fn WaitFor::seconds(seconds : Int) -> WaitFor {
+pub fn WaitFor::seconds(seconds : Int32) -> WaitFor {
   Millis(seconds * 1000)
 }
 
@@ -98,7 +98,7 @@ pub struct GenericImage {
   mappings : Array[PortMapping]
   mounts : Array[Mount]
   ready_conditions : Array[WaitFor]
-  mut startup_timeout_ms : Int
+  mut startup_timeout_ms : Int32
   mut working_dir : String?
   mut user : String?
   mut network : String?
@@ -137,26 +137,39 @@ pub fn GenericImage::descriptor(self : GenericImage) -> String {
 }
 
 ///|
-pub fn GenericImage::with_cmd(self : GenericImage, command : Array[String]) -> GenericImage {
+pub fn GenericImage::with_cmd(
+  self : GenericImage,
+  command : Array[String],
+) -> GenericImage {
   self.command = command.copy()
   self
 }
 
 ///|
-pub fn GenericImage::with_entrypoint(self : GenericImage, entrypoint : String) -> GenericImage {
+pub fn GenericImage::with_entrypoint(
+  self : GenericImage,
+  entrypoint : String,
+) -> GenericImage {
   self.entrypoint = Some(entrypoint)
   self
 }
 
 ///|
-pub fn GenericImage::with_container_name(self : GenericImage, name : String) -> GenericImage {
+pub fn GenericImage::with_container_name(
+  self : GenericImage,
+  name : String,
+) -> GenericImage {
   self.container_name = Some(name)
   self
 }
 
 ///|
 /// The most recent assignment to a key wins, matching upstream request overrides.
-pub fn GenericImage::with_env_var(self : GenericImage, key : String, value : String) -> GenericImage {
+pub fn GenericImage::with_env_var(
+  self : GenericImage,
+  key : String,
+  value : String,
+) -> GenericImage {
   let vars : Array[(String, String)] = []
   for (k, v) in self.env_vars {
     if k != key {
@@ -169,7 +182,11 @@ pub fn GenericImage::with_env_var(self : GenericImage, key : String, value : Str
 }
 
 ///|
-pub fn GenericImage::with_label(self : GenericImage, key : String, value : String) -> GenericImage {
+pub fn GenericImage::with_label(
+  self : GenericImage,
+  key : String,
+  value : String,
+) -> GenericImage {
   let labels : Array[(String, String)] = []
   for (k, v) in self.labels {
     if k != key {
@@ -184,7 +201,7 @@ pub fn GenericImage::with_label(self : GenericImage, key : String, value : Strin
 ///|
 pub fn GenericImage::with_mapped_port(
   self : GenericImage,
-  host_port : Int,
+  host_port : Int32,
   container_port : ContainerPort,
 ) -> GenericImage raise {
   self.mappings.push(PortMapping::new(host_port, container_port))
@@ -202,13 +219,19 @@ pub fn GenericImage::with_exposed_port(
 }
 
 ///|
-pub fn GenericImage::with_mount(self : GenericImage, mount : Mount) -> GenericImage {
+pub fn GenericImage::with_mount(
+  self : GenericImage,
+  mount : Mount,
+) -> GenericImage {
   self.mounts.push(mount)
   self
 }
 
 ///|
-pub fn GenericImage::with_wait_for(self : GenericImage, ready : WaitFor) -> GenericImage {
+pub fn GenericImage::with_wait_for(
+  self : GenericImage,
+  ready : WaitFor,
+) -> GenericImage {
   self.ready_conditions.push(ready)
   self
 }
@@ -216,7 +239,7 @@ pub fn GenericImage::with_wait_for(self : GenericImage, ready : WaitFor) -> Gene
 ///|
 pub fn GenericImage::with_startup_timeout(
   self : GenericImage,
-  milliseconds : Int,
+  milliseconds : Int32,
 ) -> GenericImage raise {
   guard milliseconds > 0 else { fail("startup timeout must be positive") }
   self.startup_timeout_ms = milliseconds
@@ -224,31 +247,46 @@ pub fn GenericImage::with_startup_timeout(
 }
 
 ///|
-pub fn GenericImage::with_working_dir(self : GenericImage, directory : String) -> GenericImage {
+pub fn GenericImage::with_working_dir(
+  self : GenericImage,
+  directory : String,
+) -> GenericImage {
   self.working_dir = Some(directory)
   self
 }
 
 ///|
-pub fn GenericImage::with_user(self : GenericImage, user : String) -> GenericImage {
+pub fn GenericImage::with_user(
+  self : GenericImage,
+  user : String,
+) -> GenericImage {
   self.user = Some(user)
   self
 }
 
 ///|
-pub fn GenericImage::with_network(self : GenericImage, name : String) -> GenericImage {
+pub fn GenericImage::with_network(
+  self : GenericImage,
+  name : String,
+) -> GenericImage {
   self.network = Some(name)
   self
 }
 
 ///|
-pub fn GenericImage::with_platform(self : GenericImage, platform : String) -> GenericImage {
+pub fn GenericImage::with_platform(
+  self : GenericImage,
+  platform : String,
+) -> GenericImage {
   self.platform = Some(platform)
   self
 }
 
 ///|
-pub fn GenericImage::with_readonly_rootfs(self : GenericImage, enabled : Bool) -> GenericImage {
+pub fn GenericImage::with_readonly_rootfs(
+  self : GenericImage,
+  enabled : Bool,
+) -> GenericImage {
   self.readonly_rootfs = enabled
   self
 }

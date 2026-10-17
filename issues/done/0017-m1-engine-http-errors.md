@@ -1,9 +1,9 @@
 # [P1 / M1] Docker API ステータスと失敗分類を実装
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P1
 Milestone: M1
@@ -60,18 +60,18 @@ Docker Engine API の HTTP 応答を、操作の文脈付きで失敗分類す�
 
 ## 受け入れ条件
 
-- [ ] Given inspect が `{"message":"No such container: ..."}` 付きの 404, when 分類する, then container not found になり、対象 ID を保持する。
-- [ ] Given stop/rm が 404, when 分類する, then container not found が返り、呼び出し側（0011）が冪等成功へ変換できる。
-- [ ] Given image resolve/pull が 404, when 分類する, then image not found になり、container not found と区別される。
-- [ ] Given archive が `{"message":"Could not find the file /no/such in container x"}` 付きの 404, when 分類する, then container path not found になり、リクエストのパスを保持する。
-- [ ] Given archive が上記以外の文言・空 body・非 JSON の 404, when 分類する, then container not found に寄せられる（誤って path not found にしない）。
-- [ ] Given 401 または 403, when 分類する, then 認証・権限の失敗として操作名付きで返り、資格情報を含まない。
-- [ ] Given 409, when 分類する, then 競合として操作名付きで返る。
-- [ ] Given 5xx, when 分類する, then daemon 障害としてステータスと操作名付きで返る。
-- [ ] Given 上限を超えるエラー body, when 読む, then 切り詰めず body too large として失敗する（分類に部分 body を使わない）。
-- [ ] Given 同一の失敗応答, when 繰り返し分類する, then 同じ分類結果になる（決定的）。
-- [ ] Given エラー経路, when 応答処理が終わる, then socket が閉じられ、FD が残らない。
-- [ ] 既存の CLI 経路のエラー文面テストが回帰しない。
+- [x] Given inspect が `{"message":"No such container: ..."}` 付きの 404, when 分類する, then container not found になり、対象 ID を保持する。(`ContainerNotFound(op, container)`)
+- [x] Given stop/rm が 404, when 分類する, then container not found が返り、呼び出し側（0011）が冪等成功へ変換できる。(同一 variant)
+- [x] Given image resolve/pull が 404, when 分類する, then image not found になり、container not found と区別される。(`ResolveImage` context → `ImageNotFound`)
+- [x] Given archive が `{"message":"Could not find the file /no/such in container x"}` 付きの 404, when 分類する, then container path not found になり、リクエストのパスを保持する。(`ARCHIVE_404_PREFIX` 照合)
+- [x] Given archive が上記以外の文言・空 body・非 JSON の 404, when 分類する, then container not found に寄せられる（誤って path not found にしない）。(5 パターン全て ContainerNotFound)
+- [x] Given 401 または 403, when 分類する, then 認証・権限の失敗として操作名付きで返り、資格情報を含まない。
+- [x] Given 409, when 分類する, then 競合として操作名付きで返る。
+- [x] Given 5xx, when 分類する, then daemon 障害としてステータスと操作名付きで返る。(`ServerError(op,status,message)`)
+- [x] Given 上限を超えるエラー body, when 読む, then 切り詰めず body too large として失敗する（分類に部分 body を使わない）。(decoder の `BodyTooLarge` → `engine_error_of_failure` で `EngineError::BodyTooLarge` に写像)
+- [x] Given 同一の失敗応答, when 繰り返し分類する, then 同じ分類結果になる（決定的）。(`describe()` 比較)
+- [x] Given エラー経路, when 応答処理が終わる, then socket が閉じられ、FD が残らない。(分類層は fd を保持しない; 0006 の exchange は `defer conn.close()` で全経路 close、wbtest 済み)
+- [x] 既存の CLI 経路のエラー文面テストが回帰しない。(66 tests PASS)
 
 ## テスト計画
 
@@ -106,3 +106,6 @@ Docker Engine API の HTTP 応答を、操作の文脈付きで失敗分類す�
 - 証跡: 分類テーブルのテスト結果、fake Engine の応答ログ、実機 404 の応答 body と分類結果を残す。
 - 公開エラー表現の確定は 0049 に依存するため、本 issue では internal 型と決定的な分類を与えるところまでとする。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: internal EngineError classification table
+- 2026-11-04: 実装完了。engine_error.mbt に `EngineOp`（ResolveImage/ContainerLifecycle/Archive）と `EngineError`（12 variants）を追加。`classify_engine_error` は status×context×body で決定的に分類し、daemon `{"message":...}` は JSON parse 経由で欠落・非JSON時は status のみで分類。`engine_error_of_failure` が HttpDecodeError/SocketConnectError を BodyTooLarge/MalformedResponse/TransportError に写像。moon check --deny-warn PASS、66 tests PASS。fake Engine + 実 daemon 分類は未実行（daemon 不在）。
+- 2026-11-04: classification table landed; daemon verification deferred

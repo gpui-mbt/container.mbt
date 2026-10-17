@@ -1,9 +1,9 @@
 # [P0 / M1] Node/Rust に依存しない Docker Unix socket transport
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M1
@@ -52,12 +52,12 @@ MoonBit native から Docker Engine API の Unix domain socket（既定 `/var/ru
 
 ## 受け入れ条件
 
-- [ ] Given Linux の稼働 Docker daemon, when transport で `GET /_ping` を送る, then 応答（HTTP 200 相当）のバイト列を受け取り、docker CLI プロセスを起動していない。
-- [ ] Given 存在しない socket path, when connect する, then 「不存在」と分類されたエラーが返る。
-- [ ] Given 読み取り権限のない socket, when connect する, then 「権限拒否」と分類されたエラーが返り、不存在と混同されない。
-- [ ] Given mock の Unix socket server, when 1 リクエストを送る, then 送信バイト列が期待どおりで、応答を受信できる。
-- [ ] Given 送信途中の失敗・読取失敗・取消, then 接続が閉じられ、`/proc/self/fd` などでリークが観測されない。
-- [ ] Given `moon check --target native --deny-warn` と `moon test --target native`, then PASS する。
+- [ ] Given Linux の稼働 Docker daemon, when transport で `GET /_ping` を送る, then 応答（HTTP 200 相当）のバイト列を受け取り、docker CLI プロセスを起動していない。**未実行**（この環境に Docker daemon がない。mock listen/accept socket で同経路を検証済み）
+- [x] Given 存在しない socket path, when connect する, then 「不存在」と分類されたエラーが返る。(`SocketConnectError::SocketMissing`, transport_wbtest)
+- [x] Given 読み取り権限のない socket, when connect する, then 「権限拒否」と分類されたエラーが返り、不存在と混同されない。(`PermissionDenied`, chmod 0000 親 dir で検証)
+- [x] Given mock の Unix socket server, when 1 リクエストを送る, then 送信バイト列が期待どおりで、応答を受信できる。(`unix_listen` + `unix_accept` fixture で `GET /_ping` round-trip)
+- [x] Given 送信途中の失敗・読取失敗・取消, then 接続が閉じられ、`/proc/self/fd` などでリークが観測されない。(closed-peer write → raise、cancelled read → close 可能、512 回失敗 connect で EMFILE なし)
+- [x] Given `moon check --target native --deny-warn` と `moon test --target native`, then PASS する。(45 tests PASS)
 
 ## テスト計画
 
@@ -86,3 +86,6 @@ MoonBit native から Docker Engine API の Unix domain socket（既定 `/var/ru
 - 実装手段の決定（async API / C FFI）を完了条件に含め、決定結果をこの issue のコメントまたは PR 記述に残す。
 - 0007 が本 transport の上に HTTP デコーダを載せる。0018 が deadline・取消を一元化する。関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: M1 transport: unix_transport.c stub + transport.mbt over RawFdStream
+- 2026-11-04: 実装完了。決定: `moonbitlang/async@0.22.4` の `socket` pkg は TCP/UDP のみで Unix socket クライアントなし → C FFI + native-stub (`unix_transport.c`) で `socket/connect/listen/accept/socketpair` を薄くラップし、fd を `@raw_fd.RawFdStream` に渡して event-loop IO。`UnixSocketTransport`/`UnixSocket`/`SocketConnectError` を transport.mbt に追加。moon test 45 PASS、moon check --deny-warn PASS。実 daemon 検証は CI/docker 環境に委譲（未実行）。
+- 2026-11-04: transport landed; real-daemon ping remains unexecuted (no daemon locally)

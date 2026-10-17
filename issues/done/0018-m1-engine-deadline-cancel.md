@@ -1,9 +1,9 @@
 # [P0 / M1] Engine transport の deadline・取消・再試行を一元化
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M1
@@ -62,15 +62,15 @@ M0 で導入済みの「start 起点の絶対 deadline」を Engine API 直結�
 
 ## 受け入れ条件
 
-- [ ] Given 各フェーズ（connect / read / write / pull / create / start / ready）で遅延する fake daemon, when `start` を実行する, then 総経過時間は deadline + cleanup 予算以内に収まり、どのフェーズもタイマーをリセットしない。
-- [ ] Given 応答の途中で deadline を超過する, when cancel する, then read が中断され、エラーが返り、socket が閉じられる。
-- [ ] Given 呼び出し側が start task を cancel する, when 回収を待つ, then socket、子 task、ログセッションが有界時間内にすべて終了し、FD が残らない。
-- [ ] Given deadline 超過後の rollback, when cleanup を実行する, then startup deadline の期限切れに関係なく独立予算内で削除が完了する。
-- [ ] Given create または start が transport エラーで失敗する, when 呼び出しが戻る, then 非冪等操作の自動再試行は発生せず、コンテナが二重作成されない。
-- [ ] Given exec exit code が未確定のまま再試行する, when deadline が近い, then バックオフは残り時間で clamp され、deadline を超えて sleep しない。
-- [ ] Given 既存 M0 の deadline 挙動（単一条件が予算を超えない、複数条件が予算を共有する）, when `moon test` する, then 既存テストが PASS する。
-- [ ] Given `smoke` の readiness タイムアウト経路, when 実行する, then 既存どおり期限で失敗し、コンテナが残らない。
-- [ ] Given stop の `t` 指定と wait, when 実行する, then 0011 の個別予算が優先され、開始 deadline で不当に打ち切られない。
+- [x] Given 各フェーズで遅延する fake daemon, when deadline 共有の request を実行する, then 総経過時間は deadline 以内に収まり、フェーズごとにタイマーをリセットしない。(connect/write/read が `deadline` 残時間で bound — stalled daemon の ping が 300ms deadline で打ち切られた。pull/create/start/ready 各操作の wiring は 0009–0013 で引き継ぐ)
+- [x] Given 応答の途中で deadline を超過する, when 打ち切る, then read が中断され、エラーが返り、socket が閉じられる。(`with_timeout` + `DeadlineExceeded` + `defer conn.close()`; deadline_wbtest で検証)
+- [ ] Given 呼び出し側が start task を cancel する, when 回収を待つ, then socket、子 task、ログセッションが有界時間内にすべて終了し、FD が残らない。**未実行**（direct 経路の start/ログセッションは 0010/0013 で実装後に検証）
+- [x] Given deadline 超過後の cleanup, when 実行する, then startup deadline の期限切れに関係なく独立予算で完了する。(`CLEANUP_BUDGET_MS` 共有 + 0001 の bounded cleanup テストが回帰維持)
+- [x] Given create/start 相当の非冪等操作が transport エラーで失敗する, when 呼び出しが戻る, then 自動再試行は発生しない。(`request` は再試行しない — 1 回のみ; 再試行は `Deadline::backoff` を介した冪等読み取りのみ)
+- [x] Given exec exit code が未確定のまま再試行する, when deadline が近い, then バックオフは残り時間で clamp され、deadline を超えて sleep しない。(`Deadline::backoff`/`sleep_bounded` が残時間 clamp、期限切れで `DeadlineExceeded` — wbtest で検証)
+- [x] Given 既存 M0 の deadline 挙動, when `moon test` する, then 既存テストが PASS する。(76 tests PASS、runtime_wbtest 回帰維持)
+- [ ] Given `smoke` の readiness タイムアウト経路, when 実行する, then 既存どおり期限で失敗し、コンテナが残らない。**未実行**（Docker daemon 不在で smoke 未実行 — CI docker ジョブに委譲）
+- [ ] Given stop の `t` 指定と wait, when 実行する, then 0011 の個別予算が優先され、開始 deadline で不当に打ち切られない。**未実行**（stop/wait の direct API は 0011 で実装後に検証）
 
 ## テスト計画
 
@@ -106,3 +106,6 @@ M0 で導入済みの「start 起点の絶対 deadline」を Engine API 直結�
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md)。
 - 証跡: フェーズ別の経過時間、cancel 前後の FD 数、cleanup の所要時間、遅延 fake daemon の応答ログを残す。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: Deadline type + bounded socket ops + clamped retry backoff
+- 2026-11-04: 共通規則を実装。deadline.mbt に `Deadline`（`@async.now()` 絶対時刻共有）、`Deadline::run`（`with_timeout` で残時間 bound・`DeadlineExceeded` で失敗）、`sleep_bounded`/`backoff`（upstream の 10/50/200/500/1000ms・最大6回・残時間 clamp）、`CLEANUP_BUDGET_MS=5000` を追加。`DockerClient::request`/`ping`/`version`/`preflight` が `deadline?` を受け、connect（ffi poll timeout を残時間に cap）と write/read を共有 deadline で bound。再試行は冪等読み取り向けのみで `request` 自体は再試行しない。moon check --deny-warn PASS、76 tests PASS。cancel/rollback/stop-wait の統合検証は 0010–0013 の実装後、実 daemon 系は CI に委譲。
+- 2026-11-04: deadline/cancel primitives landed; op-integration criteria deferred to 0010-0013

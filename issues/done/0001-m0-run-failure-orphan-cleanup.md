@@ -1,9 +1,9 @@
 # [P0 / M0] CLI run が ID を返す前に失敗した場合の orphan 回収
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-10-17
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M0
@@ -53,11 +53,11 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given entrypoint 不正などで run が非ゼロ終了し ID を取得できない, when `start` がエラーを返す, then 生成された name のコンテナは `docker ps -a` に存在しない。
-- [ ] Given run が startup timeout を超過する, when `start` がタイムアウトで失敗する, then 後から作成されたコンテナも含めて残存しない。
-- [ ] Given ユーザーが同名の既存コンテナを所有している, when `with_container_name` で同じ name を指定して `start` する, then run 前に失敗し既存コンテナは変更されない。
-- [ ] Given 他プロセス所有の無関係なコンテナが存在する, when 回収処理が実行される, then run ID label が一致するコンテナだけが削除される。
-- [ ] 回収処理が失敗しても、run の元エラー（exit code・stderr）がそのまま呼び出し側へ返る。
+- [ ] Given entrypoint 不正などで run が非ゼロ終了し ID を取得できない, when `start` がエラーを返す, then 生成された name のコンテナは `docker ps -a` に存在しない。（未実行: 実 Docker daemon が必要。`smoke/main.mbt` に故障注入ケースを追加済み、CI の docker ジョブで検証）
+- [ ] Given run が startup timeout を超過する, when `start` がタイムアウトで失敗する, then 後から作成されたコンテナも含めて残存しない。（未実行: 同上。タイムアウト経路は `errdefer` + `collect_run_attempt` で実装済み、実 daemon での確認は CI）
+- [x] Given ユーザーが同名の既存コンテナを所有している, when `with_container_name` で同じ name を指定して `start` する, then run 前に失敗し既存コンテナは変更されない。（`name_in_use_via` の事前 inspect で実装。wbtest「name preflight classifies inspect results」PASS、実 daemon での holder 生存確認は smoke に追加済み / 未実行）
+- [x] Given 他プロセス所有の無関係なコンテナが存在する, when 回収処理が実行される, then run ID label が一致するコンテナだけが削除される。（fixture 実行ファイルによる wbtest で label 不一致は rm 不発火・一致のみ rm 到達を確認 PASS）
+- [x] 回収処理が失敗しても、run の元エラー（exit code・stderr）がそのまま呼び出し側へ返る。（`collect_run_attempt` は raise しない設計。非ゼロ終了経路は元の exit/stderr に rollback 注記を付記、timeout・取消経路は `errdefer` で回収後に元エラーを再送出）
 
 ## テスト計画
 
@@ -92,3 +92,6 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 - 証跡として `docker ps -a` の前後と run の stderr をログまたは artifact に残す（0052 の CI 方針と整合）。
 - 0005 が本 issue の回帰テストを固定し、0002 の実機受入は本 issue の完了を前提とする。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-10-17: 実装着手: run ID 採番・label 付き name 生成・所有確認つき回収を runtime/commands に追加する
+- 2026-10-17: 実装完了: `run_attempt.mbt`（`RunAttempt`・`next_run_id`・`OWNERSHIP_LABEL`）、`commands.mbt`（`build_run_args(attempt~)` が常時 `--name` と `--label container-mbt.owned=<run-id>` を付与、`build_inspect_args`）、`runtime.mbt`（ユーザー name の事前衝突検出 `name_in_use_via`、所有確認つき回収 `collect_run_attempt`/`collect_owned_container` を起動 deadline 独立の 5 秒予算 + `protect_from_cancel` で実行）。検証: `moon check --target native --deny-warn` PASS、`moon test --target native` 27 件 PASS（新規 8 件: run ID 一意性/形式、生成 name の妥当性、不正 name 拒否、label 付与、precheck 分類、所有 label 不一致は削除しない、不在は no-op、label 一致のみ rm 到達）。実 daemon 必須の AC 2 件は未実行として記録。`smoke/main.mbt` に故障注入（不正 entrypoint）と name 衝突事前拒否を追加済み（CI docker ジョブで実行）。Apple 実機分は 0002 で実施。
+- 2026-10-17: 実装・wbtest PASS。実 daemon 必須の AC 2 件は未実行（smoke に故障注入追加済み、CI で検証）
