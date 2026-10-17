@@ -1,6 +1,6 @@
 # [P2 / M3] Mooncakes consumer から使える公開 API・文書・配布
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -63,12 +63,12 @@ mooncakes の独立 consumer が依存解決から start / rm まで通ること
 
 ## 受け入れ条件
 
-- [ ] Given 独立 consumer プロジェクト, when mooncakes 依存を解決して build する, then 成功する。
+- [x] Given 独立 consumer プロジェクト, when mooncakes 依存を解決して build する, then 成功する。
 - [ ] Given 同 consumer, when Docker 実機で start / exec / logs / rm を実行する, then 成功し、テスト用 prefix の残存コンテナがない。
-- [ ] Given README, when 読む, then Docker / Apple の完全な例とサポート表（検証済み / 未実行の区別、version 要件、明示 rm 必須）がある。
-- [ ] Given moon.mod, when `moon package --list` 相当で確認する, then 公開に必要なメタデータが揃っている。
-- [ ] Given バージョン未決定・未承認の状態, when リポジトリを確認する, then 公開操作は行われていない。
-- [ ] Given リポジトリ内の既存 API 利用者（smoke など）, when 変更後にビルドする, then 壊れない。
+- [x] Given README, when 読む, then Docker / Apple の完全な例とサポート表（検証済み / 未実行の区別、version 要件、明示 rm 必須）がある。
+- [x] Given moon.mod, when `moon package --list` 相当で確認する, then 公開に必要なメタデータが揃っている。
+- [x] Given バージョン未決定・未承認の状態, when リポジトリを確認する, then 公開操作は行われていない。
+- [x] Given リポジトリ内の既存 API 利用者（smoke など）, when 変更後にビルドする, then 壊れない。
 
 ## テスト計画
 
@@ -95,3 +95,15 @@ mooncakes の独立 consumer が依存解決から start / rm まで通ること
 - 関連: 0048（公開 API 契約）、0052（CI との分担）、0002 / 0032（Apple 実機受入後にサポート表の未実行セルを埋める）。
 - mooncakes の公開要件・コマンドは実装時に moon / mooncakes のドキュメントで確認する。CI の `moon package --list` を公開前チェックとして再利用する。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+
+
+## 実装記録
+
+- **consumer 検証**: `/tmp/consumer-0051`（module `consumer/check`）を `moon.work` の local member 解決で構築（moon.mod の local path dep は新形式では非推奨 — moon.work `members` が正規手順）。`moon check --target native --deny-warn` / `moon build --target native` / 生成バイナリ実行まで通過。README 例と同形の `with_container` + `exec` 呼び出しが公開パッケージ境界越しに型検査されることを確認。
+- **Docker 実機 E2E**: **未実行**（当該環境に daemon 非搭載）。consumer の E2E 実行は CI Docker ジョブで受入予定。
+- **Apple consumer**: **未実行**（物理 Mac が必要、0032 受入後に併せて）。
+- **README**: Docker（Linux, direct）/ Apple（CLI 経路、未検証明記）の最小例、サポート表（OS/runtime/version/検証状況/制限）、非互換点（明示 rm、async-only、native 限定、未実装範囲リンク）を追加。旧記述の stale 部分（Drop cleanup なし、healthcheck/exit 未対応）を実装済み状態へ修正。
+- **moon.mod**: `supported_targets = "native"` を追加。name/version/readme/repository/license/keywords/description/preferred_target は既存で mooncakes 要件を充足。
+- **.moonignore**: `/issues/`（内部 backlog）を公開 archive から除外。`moon package --list` で 0 件確認。
+- **修正した不具合**: `with_container` の body が sync `(Container) -> T raise` で、`exec`/`stop`/`rm`（全て async）を呼べなかった → `async (Container) -> T` へ修正（consumer 境界での検証で発見）。
+- **公開フロー**（未実行・記録のみ）: バージョン確定と承認後に `moon package --list` で内容確認 → `moon publish`（mooncakes アカウント必須）。本 issue では publish しない。

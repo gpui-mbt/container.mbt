@@ -14,6 +14,8 @@ description = "MoonBit-first test container API inspired by shiguredo/container-
 
 preferred_target = "native"
 
+supported_targets = "native"
+
 import {
   "moonbitlang/async@0.22.4",
 }

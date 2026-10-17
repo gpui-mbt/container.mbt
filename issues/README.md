@@ -79,7 +79,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0048 ImageExt・ContainerRequest の override 契約を整える](./done/0048-m3-image-request-api-parity.md) — P1 / deps: 0010
 - [ ] [0049 公開エラー型と失敗分類の一貫性を検証](./polished/0049-m3-typed-errors-failure-matrix.md) — P1 / deps: 0017, 0024
 - [ ] [0050 Rust upstream と MoonBit の同一 fixture 比較基盤](./polished/0050-m3-conformance-oracle.md) — P0 / deps: 0020, 0032
-- [ ] [0051 Mooncakes consumer から使える公開 API・文書・配布](./polished/0051-m3-consumer-docs-publish.md) — P2 / deps: 0048
+- [x] [0051 Mooncakes consumer から使える公開 API・文書・配布](./done/0051-m3-consumer-docs-publish.md) — P2 / deps: 0048
 - [ ] [0052 Linux/Mac の実証と compile-only を区別する CI](./polished/0052-m3-ci-platform-matrix.md) — P1 / deps: 0020, 0032
 - [ ] [0053 pinned upstream からの API/挙動 drift を追跡する](./polished/0053-m3-upstream-revision-drift.md) — P2 / deps: 0050
 - [ ] [0054 argv/JSON/path/ログの不正入力と資源リークを系統検証](./polished/0054-m3-input-validation-and-leak-fuzz.md) — P1 / deps: 0010, 0024

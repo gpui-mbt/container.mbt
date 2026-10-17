@@ -341,7 +341,7 @@ pub async fn GenericImage::start_with_client(Self, DockerClient) -> Container
 pub fn GenericImage::with_cap_add(Self, String) -> Self raise
 pub fn GenericImage::with_cap_drop(Self, String) -> Self raise
 pub fn GenericImage::with_cmd(Self, Array[String]) -> Self
-pub async fn[T] GenericImage::with_container(Self, Runtime, (Container) -> T raise) -> T
+pub async fn[T] GenericImage::with_container(Self, Runtime, async (Container) -> T) -> T
 pub fn GenericImage::with_container_name(Self, String) -> Self
 pub fn GenericImage::with_copy_to(Self, String, CopyDataSource, mode? : Int64, uid? : Int64, gid? : Int64) -> Self raise
 pub fn GenericImage::with_entrypoint(Self, String) -> Self

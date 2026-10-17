@@ -911,7 +911,7 @@ async fn Container::exit_wait_until(
 pub async fn[T] GenericImage::with_container(
   self : GenericImage,
   runtime : Runtime,
-  body : (Container) -> T raise,
+  body : async (Container) -> T,
 ) -> T {
   let container = self.start(runtime)
   let mut result : T? = None

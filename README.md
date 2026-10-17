@@ -11,15 +11,44 @@ MoonBit-native port of [shiguredo/container-rs](https://github.com/shiguredo/con
 - macOS 26 on Apple Silicon with Apple `container` installed and `container system start` completed.
 - No Node.js, Python, Rust, or Docker Desktop dependency in the MoonBit library.
 
-## API (first slice)
+## Quickstart
 
-`GenericImage` provides `new`, `with_cmd`, `with_env_var`, `with_label`, `with_entrypoint`, `with_container_name`, `with_mapped_port`, `with_exposed_port`, `with_mount`, `with_wait_for`, and other options.
+Docker on Linux (direct Engine API — no `docker` CLI needed):
 
-`image.start(runtime)` (or `start_detected()`) returns a container through the runtime's direct adapter — the Docker Engine API on Linux. `image.start_cli(runtime)` selects the `docker`/`container` CLI adapter explicitly. `container.exec(...)`, `logs()`, `stop()`, `rm()`, `get_host_port_ipv4`/`get_host_port_ipv6`, and `get_bridge_ip_address` work on both adapters; on the direct adapter no CLI process is ever spawned. Published mappings are snapshotted when the CLI run starts; later image-builder mutations cannot change the container's reported ports. **Call `rm()` explicitly**, ideally in a cleanup branch; unlike the Rust library, this version does not clean up in Drop.
+```moonbit
+async fn main {
+  let image = @container.GenericImage::new("alpine", "3.20")
+    .with_cmd(["tail", "-f", "/dev/null"])
+    .with_wait_for(@container.WaitFor::millis(500))
+  // with_container runs the body and always removes the container.
+  image.with_container(@container.Docker, container => {
+    let out = container.exec(["sh", "-c", "printf hello"])
+    println(out.stdout())
+  })
+}
+```
 
-Supported waits: nothing, delay, stdout/stderr/either log string. A shared startup deadline uses the MoonBit async timer clock; the CLI run command, each readiness condition, polling sleep, and log subprocess receive only the remaining budget. Rollback cleanup runs separately after readiness failure. **A CLI launch that times out before its container ID is known can still leave a runtime-owned container behind; this is an open startup-cleanup blocker.** Healthcheck/exit waits fail before container creation rather than silently skipping. An exposed port with host port 0 is Docker-only until Apple ephemeral publishing and runtime inspection are verified.
+Apple Container on macOS 26 (Apple Silicon) — **unverified** until the M2 XPC path lands; the CLI adapter exists but covers a subset:
+
+```moonbit
+let container = image.start_cli(@container.AppleContainer)
+```
+
+Supported waits: `nothing`, `millis`, `millis_in_env_var`, `message_on_stdout`/`stderr`/`either`, `http`, `healthcheck`, `exit_code` (latter four on the direct Docker path; CLI adapters reject them preflight). Container options include `with_name`/`with_tag` overrides, mounts (`bind`/`volume`/`tmpfs` with size/mode), `with_hostname`/`with_host_addr`/`with_host_gateway`, `with_privileged`/`with_cap_add`/`with_cap_drop`/`with_shm_size`/`with_init`, `with_healthcheck`, and `with_copy_to` for pre-start file injection.
+
+Cleanup contract: `with_container` scopes best-effort removal (suppressed by exact `TESTCONTAINERS_COMMAND=keep`), and a process-lifetime watchdog reaps owned Docker containers on abnormal exit. Containers started via plain `start`/`start_cli` still require an **explicit `rm()`**.
 
 See [Porting status and roadmap](docs/PORTING.md) for exact differences. No claim of functional parity is made.
+
+## Support matrix
+
+| OS | Runtime | Minimum version | Status | Notes |
+|---|---|---|---|---|
+| Linux | Docker Engine (Unix socket) | API 1.44+ (Docker 25+) | PASS (native tests + CI smoke) | direct adapter; rootless/Podman boundary in [ENGINE_COMPATIBILITY.md](docs/ENGINE_COMPATIBILITY.md) |
+| Linux | `docker` CLI | Docker 25+ | PASS (native tests; CI smoke planned) | explicit `start_cli` only |
+| macOS 26 | Apple `container` | container 1.2.0 | 未実行 (physical Mac required) | CLI adapter subset; XPC adapter is M2 (issues 0023–0032) |
+
+Incompatibilities to know: explicit `rm()` is required outside `with_container`; the public API is `async` only (no sync facade — see docs/PORTING.md); native backend only (`supported_targets = "native"`).
 
 ## Development
 
