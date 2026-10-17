@@ -5,6 +5,8 @@ pub struct Container {
   runtime : Runtime
   mappings : Array[PortMapping]
   mut removed : Bool
+  /// Lazily cached `docker inspect` port resolution for dynamic ports.
+  priv mut resolved_ports : ResolvedPorts?
 }
 
 ///|
@@ -41,20 +43,69 @@ pub fn Container::runtime(self : Container) -> Runtime {
 }
 
 ///|
-/// Resolve explicitly mapped ports. Dynamically assigned ports require an
-/// inspect API and are deliberately not returned as a guessed value.
-pub fn Container::get_host_port_ipv4(
+/// Resolve explicitly mapped ports, then dynamically assigned ones.
+/// Fixed mappings (host port != 0) always win from the snapshot —
+/// deterministic, no daemon call. Otherwise `docker inspect`'s
+/// `NetworkSettings.Ports` is resolved (cached after first fetch);
+/// 0 is never returned — unexposed and unassigned are distinct errors.
+pub async fn Container::get_host_port_ipv4(
   self : Container,
   port : ContainerPort,
-) -> Int32 raise {
+) -> Int32 {
   for mapping in self.mappings {
     if same_port(mapping.container_port(), port) && mapping.host_port() != 0 {
       return mapping.host_port()
     }
   }
-  fail(
-    "no fixed host port mapping for \{port.as_string()}; dynamic port inspection is pending",
-  )
+  self.inspect_ports().ipv4(port)
+}
+
+///|
+/// IPv6 host port for `port`, from inspect bindings only — the IPv4
+/// snapshot mappings never apply (0014).
+pub async fn Container::get_host_port_ipv6(
+  self : Container,
+  port : ContainerPort,
+) -> Int32 {
+  self.inspect_ports().ipv6(port)
+}
+
+///|
+/// `docker inspect <id>` → `NetworkSettings.Ports`, resolved once and
+/// cached. A failed inspect raises (never an empty map masquerading as
+/// "nothing exposed").
+async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
+  if self.resolved_ports is Some(p) {
+    return p
+  }
+  let result = @shell.Cmd(
+    self.runtime.executable(),
+    build_inspect_args(self.id),
+  ).output(timeout_ms=15000, max_output_bytes=16777216)
+  guard result.exit_code() == 0 else {
+    fail(
+      "container inspect failed (exit \{result.exit_code()}): \{result.stderr()}",
+    )
+  }
+  let json = @json.parse(result.stdout())
+  let ports = match json {
+    Array([first, ..]) =>
+      match first {
+        Object(m) =>
+          match m.get("NetworkSettings") {
+            Some(Object(ns)) =>
+              match ns.get("Ports") {
+                Some(p) => ResolvedPorts::parse(p)
+                _ => ResolvedPorts::empty()
+              }
+            _ => ResolvedPorts::empty()
+          }
+        _ => ResolvedPorts::empty()
+      }
+    _ => ResolvedPorts::empty()
+  }
+  self.resolved_ports = Some(ports)
+  ports
 }
 
 ///|
@@ -216,6 +267,7 @@ pub async fn GenericImage::start(
     runtime,
     mappings: published_mappings,
     removed: false,
+    resolved_ports: None,
   }
   attempt_pending.val = false
   // Why not leave a container running if readiness fails or gets cancelled.

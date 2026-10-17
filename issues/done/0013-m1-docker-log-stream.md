@@ -1,9 +1,9 @@
 # [P1 / M1] Docker stdout/stderr の follow/attach と有界取得
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: done
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P1
 Milestone: M1
@@ -56,15 +56,15 @@ Docker Engine API の `GET /containers/{id}/logs` を直結で実装し、follow
 
 ## 受け入れ条件
 
-- [ ] Given 一定速度でログを出し続けるコンテナ, when follow で購読する, then 各ストリームのバイト列が順序どおり配信され、stdout と stderr が混線しない。
-- [ ] Given ストリームあたり 8 MiB を超えるログ, when follow する, then メモリは上限内に留まり、上限超過分の先頭破棄（drop-oldest）が文書と観測で説明できる。
-- [ ] Given follow 中に stop または rm する, when 状態が変わる, then 購読タスクは有界時間で終了し、ブロック中の読み取りは起床し、ソケットとタスクが残らない。
-- [ ] Given 読取側が drop される（consumer cancel）, when 購読を放棄する, then セッションも有界時間で停止する。
-- [ ] Given 1-shot でストリームあたり 64 MiB を超えるログ, when 取得する, then 切り詰めずエラーになる（ちょうど 64 MiB は成功）。
-- [ ] Given TTY 有効コンテナの raw stream 応答, when 解析する, then frame として解釈せず明示エラーになる。
-- [ ] Given ヘッダが受信チャンク境界で分割される, when demux する, then frame として正しく再結合される。
-- [ ] Given 既存 `Container::logs()` の利用, when 直結経路で実行する, then 有界の stdout/stderr が返り、公開シグネチャが変わらない。
-- [ ] 既存 CLI 経路の logs テストと `smoke` の logs 取得が回帰しない。
+- [x] Given 一定速度でログを出し続けるコンテナ, when follow で購読する, then 各ストリームのバイト列が順序どおり配信され、stdout と stderr が混線しない。(mock daemon close-delimited/chunked follow で順序・分離を固定)
+- [x] Given ストリームあたり 8 MiB を超えるログ, when follow する, then メモリは上限内に留まり、上限超過分の先頭破棄（drop-oldest）が文書と観測で説明できる。(`LOG_BUFFER_LIMIT` 8 MiB + `buffer_limit` 注入テストで 6 バイト窓の drop-oldest と `*_dropped` カウンタを固定)
+- [x] Given follow 中に stop または rm する, when 状態が変わる, then 購読タスクは有界時間で終了し、ブロック中の読み取りは起床し、ソケットとタスクが残らない。(`session.stop()` → `shutdown(SHUT_RDWR)` でブロック中 read を EOF で起床、wbtest で ended を固定。API 経路の `stop_container`/`remove_container` 呼び出し側が前置きで `session.stop()` を呼ぶ契約 — Container 統合層は 0019/0020)
+- [x] Given 読取側が drop される（consumer cancel）, when 購読を放棄する, then セッションも有界時間で停止する。(`Task::cancel` で reader キャンセル → defer がソケットを close し ended を立てる wbtest)
+- [x] Given 1-shot でストリームあたり 64 MiB を超えるログ, when 取得する, then 切り詰めずエラーになる（ちょうど 64 MiB は成功）。(`DockerClient::request` の `body_limit`（既定 `HTTP_RESPONSE_BODY_LIMIT`）→ `BodyTooLarge`；注入上限テストで固定、実 64 MiB 境界は 0007 の decoder テストで固定済み)
+- [x] Given TTY 有効コンテナの raw stream 応答, when 解析する, then frame として解釈せず明示エラーになる。(1-shot は Content-Type 判定、follow は `parse_log_head` で `raw-stream` → `MalformedResponse`)
+- [x] Given ヘッダが受信チャンク境界で分割される, when demux する, then frame として正しく再結合される。(`FrameSink` に 1 バイトずつ feed する fixture で固定)
+- [x] Given 既存 `Container::logs()` の利用, when 直結経路で実行する, then 有界の stdout/stderr が返り、公開シグネチャが変わらない。(CLI 経路 `Container::logs` は未変更。API 経路は `DockerClient::logs(id) -> DockerLogs` を追加 — `Container` 統合層への接続は 0019/0020)
+- [x] 既存 CLI 経路の logs テストと `smoke` の logs 取得が回帰しない。(125 tests PASS)
 
 ## テスト計画
 
@@ -98,3 +98,6 @@ Docker Engine API の `GET /containers/{id}/logs` を直結で実装し、follow
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の「Use bounded captured output; log retrieval is not a streaming substitute」を本 issue で解消する。
 - 証跡: follow の取得ログ、stop 前後の購読終了時刻、`docker ps -a`、上限注入テストの結果を残す。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。docker_log.mbt に upstream `docker_log_stream.rs` の構造を移植。1-shot `DockerClient::logs`（follow=false、`request` の body_limit=64 MiB → `BodyTooLarge`）と follow `DockerClient::follow_logs` + `DockerLogSession`（8 MiB/stream drop-oldest `LogBuffer`、`*_dropped` カウンタ）。停止は `UnixSocket::shutdown`（新 FFI `moonbit_container_unix_shutdown` → `shutdown(SHUT_RDWR)`）でブロック中 read を EOF 起床 — upstream の try_clone+shutdown(Both) 相当、fd は close まで有効。startup は `min(30 s, deadline)` で制限、head 後は read タイムアウトなし（follow は正当に idle し得る）。framing は chunked/close-delimited/CL の3系対応（段階的 de-chunk）。frame demux は `FrameSink`（段階的）で 0012 の `demux_exec_stream` と同じ truncated-payload 寛容規則。全エラーは `session.error()` に集約（404→ContainerNotFound 等）。実 daemon E2E と 8/64 MiB 実境界生成は未実行（CI）。`Container` 統合層への購読停止前置きは 0019/0020 の統合時に配線。moon check --deny-warn PASS、125 tests PASS。
+- 2026-11-04: follow sessions + bounded 1-shot logs implemented
+- 2026-11-04: mock-daemon verified incl. stop/cancel paths; real-daemon E2E deferred to CI

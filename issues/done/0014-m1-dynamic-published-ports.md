@@ -1,9 +1,9 @@
 # [P0 / M1] Docker の動的 host port を IPv4/IPv6 inspect で解決
 
-Status: polished
-Model: DeepSeek V4.1 Flash Free
+Status: doing
+Model: SWE-2 Max
 Created: 2026-10-16
-Updated: 2026-10-16
+Updated: 2026-11-04
 Branch: feat/initial-moonbit-container-port-20261016
 Priority: P0
 Milestone: M1
@@ -56,15 +56,15 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given `with_exposed_port` で起動したコンテナ, when `get_host_port_ipv4` を呼ぶ, then 0 以外の実割当ポートが返り、そのポートへの TCP 接続が成功する。
-- [ ] Given `80/tcp` と `80/udp` を別々に公開したコンテナ, when それぞれを問い合わせる, then protocol ごとに独立した正しい host ポートが返る（取り違えない）。
-- [ ] Given 公開していない container port, when アクセサを呼ぶ, then 未公開であることを示すエラーになる。
-- [ ] Given 公開済みだが binding が null の container port, when アクセサを呼ぶ, then 未割当であることを示すエラーになり、未公開と区別できる。
-- [ ] Given IPv4 と IPv6 の両 binding を持つ fixture, when 解析する, then IPv4 アクセサと IPv6 アクセサがそれぞれの `HostPort` を返す。
-- [ ] Given IPv6 binding のみを持つ fixture, when IPv4 アクセサを呼ぶ, then 未公開エラーになり、IPv6 アクセサは値を返す。
-- [ ] Given 不正なキーや数値でない `HostPort` を含む fixture, when 解析する, then その entry を読み飛ばし、他の entry は正しく解決する（クラッシュしない）。
-- [ ] Given 動的割当（host 0）のコンテナ, when アクセサが返す値, then 0 は決して返らない。
-- [ ] 既存の固定 port の `get_host_port_ipv4` 動作（snapshot 優先）と `smoke` の port 検証が回帰しない。
+- [ ] Given `with_exposed_port` で起動したコンテナ, when `get_host_port_ipv4` を呼ぶ, then 0 以外の実割当ポートが返り、そのポートへの TCP 接続が成功する。**未実行**（実 daemon 不在 → 0020/CI。mock daemon で inspect→IPv4/IPv6 解決を検証済み、TCP 接続は未実行）
+- [x] Given `80/tcp` と `80/udp` を別々に公開したコンテナ, when それぞれを問い合わせる, then protocol ごとに独立した正しい host ポートが返る（取り違えない）。(fixture で `80/tcp`/`80/udp` 独立解決を固定)
+- [x] Given 公開していない container port, when アクセサを呼ぶ, then 未公開であることを示すエラーになる。(`not exposed` メッセージで固定)
+- [x] Given 公開済みだが binding が null の container port, when アクセサを呼ぶ, then 未割当であることを示すエラーになり、未公開と区別できる。(`exposed` キー集合で区別 — `no IPv4/IPv6 host port assigned`)
+- [x] Given IPv4 と IPv6 の両 binding を持つ fixture, when 解析する, then IPv4 アクセサと IPv6 アクセサがそれぞれの `HostPort` を返す。(`HostIp` に `:` を含む → IPv6 マップ、それ以外（`0.0.0.0`/空）→ IPv4 マップ — upstream は全て IPv4 扱いだった点を文書化し fixture で固定)
+- [x] Given IPv6 binding のみを持つ fixture, when IPv4 アクセサを呼ぶ, then 未公開エラーになり、IPv6 アクセサは値を返す。
+- [x] Given 不正なキーや数値でない `HostPort` を含む fixture, when 解析する, then その entry を読み飛ばし、他の entry は正しく解決する（クラッシュしない）。(`bad/key` プロトコル、`HostPort:"0"` スキップを固定)
+- [x] Given 動的割当（host 0）のコンテナ, when アクセサが返す値, then 0 は決して返らない。(`HostPort` 0/非数値は解析時にスキップ、アクセサは未割当エラー)
+- [x] 既存の固定 port の `get_host_port_ipv4` 動作（snapshot 優先）と `smoke` の port 検証が回帰しない。(snapshot→inspect 優先順位を維持、131 tests PASS)
 
 ## テスト計画
 
@@ -97,3 +97,5 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 - 関連ロードマップ: [docs/PORTING.md](https://github.com/gpui-mbt/container.mbt/blob/feat/initial-moonbit-container-port-20261016/docs/PORTING.md) の「Dynamic host port / bridge IP: Fixed host ports only」を本 issue で解消する。
 - 証跡: 起動コンテナの inspect JSON（`NetworkSettings.Ports`）、アクセサの戻り値、TCP 接続結果、`docker port` の出力を残す。
 - 2026-10-16: polish-issue: 背景・対象外・受け入れ条件・テスト計画・リスク・変更履歴を補完し、独立実装可能な形に整えた
+- 2026-11-04: 実装。`ports.mbt` に `ResolvedPorts`（`exposed` キー集合 + IPv4/IPv6 マップ）と寛容な `parse`（非 tcp/udp/sctp・非数値・port 0・不正 binding は読み飛ばし）を追加。IPv4/IPv6 振り分けは `HostIp` の `:` 含有で行い、upstream の「全て IPv4」実装との差異を文書化。`ContainerInspect` に `ports` フィールド追加（`NetworkSettings.Ports` 解析）。API 経路に `DockerClient::get_host_port_ipv4/ipv6`、CLI 経路に `Container::get_host_port_ipv4`（snapshot 優先 + `docker inspect` フォールバック、`resolved_ports` キャッシュ）と `get_host_port_ipv6` を追加。公開シグネチャ変更: `get_host_port_ipv4` は `fn`→`async fn`（inspect が非同期のため）。未公開/未割当はメッセージで区別（型の体系化は 0049）。moon check --deny-warn PASS、131 tests PASS。実 daemon E2E は未実行（CI）。
+- 2026-11-04: start

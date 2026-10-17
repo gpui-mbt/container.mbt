@@ -98,6 +98,9 @@ extern "C" fn ffi_unix_accept(listen_fd : Int32) -> Int32 = "moonbit_container_u
 extern "C" fn ffi_unix_socketpair() -> Int64 = "moonbit_container_unix_socketpair"
 
 ///|
+extern "C" fn ffi_unix_shutdown(fd : Int32) -> Int32 = "moonbit_container_unix_shutdown"
+
+///|
 extern "C" fn ffi_unix_close(fd : Int32) -> Int32 = "moonbit_container_unix_close"
 
 ///|
@@ -218,6 +221,15 @@ pub async fn UnixSocket::read_until(
 /// Close the socket; safe to call more than once.
 pub fn UnixSocket::close(self : UnixSocket) -> Unit {
   self.stream.close()
+}
+
+///|
+/// `shutdown(SHUT_RDWR)` — wakes a blocked reader with EOF while the
+/// fd stays valid until `close`. Idempotent (errors are ignored: an
+/// already-closed fd is the common race). Used by `DockerLogSession`
+/// stop so `stop`/`rm` can end an in-flight follow read (0013).
+pub fn UnixSocket::shutdown(self : UnixSocket) -> Unit {
+  ignore(ffi_unix_shutdown(self.stream.fd))
 }
 
 // --- test/debug support (raw fd plumbing, not part of the stable API) ---

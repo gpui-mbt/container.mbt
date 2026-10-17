@@ -16,6 +16,8 @@ pub const ENGINE_RETRY_MAX : Int = 6
 
 pub const HTTP_RESPONSE_BODY_LIMIT : Int = 67108864
 
+pub const LOG_BUFFER_LIMIT : Int = 8388608
+
 pub const MIN_DOCKER_API_VERSION : String = "1.24"
 
 pub fn build_exec_args(String, Array[String]) -> Array[String]
@@ -101,9 +103,11 @@ pub struct Container {
   runtime : Runtime
   mappings : Array[PortMapping]
   mut removed : Bool
+  // private fields
 }
 pub async fn Container::exec(Self, Array[String]) -> ProcessOutput
-pub fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int raise
+pub async fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int
+pub async fn Container::get_host_port_ipv6(Self, ContainerPort) -> Int
 pub fn Container::id(Self) -> String
 pub async fn Container::logs(Self) -> ProcessOutput
 pub async fn Container::rm(Self) -> Unit
@@ -115,6 +119,7 @@ pub struct ContainerInspect {
   running : Bool
   exit_code : Int?
   env : Array[String]
+  ports : ResolvedPorts
 }
 
 pub struct ContainerPort {
@@ -151,13 +156,17 @@ pub struct DockerClient {
 pub async fn DockerClient::create_and_start(Self, GenericImage, deadline? : Deadline) -> String
 pub async fn DockerClient::create_container(Self, GenericImage, deadline? : Deadline) -> String
 pub async fn DockerClient::exec(Self, String, cmd~ : Array[String], env? : Array[(String, String)], deadline? : Deadline) -> DockerExecResult
+pub async fn DockerClient::follow_logs(Self, DockerLogSession, deadline? : Deadline) -> Unit
+pub async fn DockerClient::get_host_port_ipv4(Self, String, ContainerPort, deadline? : Deadline) -> Int
+pub async fn DockerClient::get_host_port_ipv6(Self, String, ContainerPort, deadline? : Deadline) -> Int
 pub async fn DockerClient::inspect_container(Self, String, deadline? : Deadline) -> ContainerInspect
+pub async fn DockerClient::logs(Self, String, tail? : String, body_limit? : Int, deadline? : Deadline) -> DockerLogs
 pub fn DockerClient::new(socket_path? : String, connect_timeout_ms? : Int) -> Self
 pub async fn DockerClient::ping(Self, deadline? : Deadline) -> Unit
 pub async fn DockerClient::preflight(Self, min_api? : String, deadline? : Deadline) -> DaemonVersion
 pub async fn DockerClient::pull_image(Self, String, platform? : String, deadline? : Deadline) -> Unit
 pub async fn DockerClient::remove_container(Self, String, force? : Bool, deadline? : Deadline) -> Unit
-pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, deadline? : Deadline) -> HttpResponse
+pub async fn DockerClient::request(Self, verb~ : String, path~ : String, op~ : String, context? : EngineOp, target? : String, headers? : Array[(String, String)], body? : Bytes, body_limit? : Int, deadline? : Deadline) -> HttpResponse
 pub async fn DockerClient::resolve_image(Self, String, deadline? : Deadline) -> String
 pub async fn DockerClient::resolve_or_pull_image(Self, String, platform? : String, deadline? : Deadline) -> String
 pub async fn DockerClient::start_container(Self, String, deadline? : Deadline) -> Unit
@@ -167,6 +176,24 @@ pub async fn DockerClient::wait_container(Self, String, deadline? : Deadline) ->
 
 pub struct DockerExecResult {
   exit_code : Int
+  stdout : Bytes
+  stderr : Bytes
+}
+
+pub struct DockerLogSession {
+  id : String
+  // private fields
+}
+pub fn DockerLogSession::error(Self) -> Error?
+pub fn DockerLogSession::is_ended(Self) -> Bool
+pub fn DockerLogSession::new(id~ : String, buffer_limit? : Int) -> Self
+pub fn DockerLogSession::stderr(Self) -> Bytes
+pub fn DockerLogSession::stderr_dropped(Self) -> Int64
+pub fn DockerLogSession::stdout(Self) -> Bytes
+pub fn DockerLogSession::stdout_dropped(Self) -> Int64
+pub fn DockerLogSession::stop(Self) -> Unit
+
+pub struct DockerLogs {
   stdout : Bytes
   stderr : Bytes
 }
@@ -271,6 +298,14 @@ pub enum Protocol {
   Sctp
 }
 
+pub struct ResolvedPorts {
+  // private fields
+}
+pub fn ResolvedPorts::empty() -> Self
+pub fn ResolvedPorts::ipv4(Self, ContainerPort) -> Int raise
+pub fn ResolvedPorts::ipv6(Self, ContainerPort) -> Int raise
+pub fn ResolvedPorts::parse(Json) -> Self
+
 pub struct RunAttempt {
   name : String
   run_id : String
@@ -295,6 +330,7 @@ pub async fn UnixSocket::read_all(Self) -> Bytes
 pub async fn UnixSocket::read_exactly(Self, Int) -> Bytes
 pub async fn UnixSocket::read_some(Self, max_len? : Int) -> Bytes?
 pub async fn UnixSocket::read_until(Self, StringView) -> String?
+pub fn UnixSocket::shutdown(Self) -> Unit
 pub async fn UnixSocket::write_all(Self, Bytes) -> Unit
 
 pub struct UnixSocketTransport {

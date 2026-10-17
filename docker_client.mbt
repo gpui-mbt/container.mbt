@@ -103,22 +103,19 @@ fn percent_encode(s : String) -> String {
 }
 
 ///|
-/// Send one request and return the decoded response. Any non-2xx status
-/// is classified into `EngineError` via `classify_engine_error`;
-/// transport/decode failures map via `engine_error_of_failure`.
-/// `deadline` bounds connect/write/read on the shared clock — no phase
-/// restarts a timer (issue 0018).
-pub async fn DockerClient::request(
+/// Connect (bounded by the shared deadline when present) and write one
+/// encoded request. Returns the open connection — the caller drives the
+/// read side (whole-body decode in `request`, incremental frame reads in
+/// `follow_logs`). Caller owns `conn.close()`.
+async fn DockerClient::send_request(
   self : DockerClient,
   verb~ : String,
   path~ : String,
   op~ : String,
-  context~ : EngineOp = EngineOp::container_lifecycle(),
-  target~ : String = "",
   headers~ : Array[(String, String)] = [],
   body~ : Bytes = b"",
   deadline? : Deadline,
-) -> HttpResponse {
+) -> UnixSocket {
   let transport = match deadline {
     None => self.transport
     Some(d) => {
@@ -133,8 +130,6 @@ pub async fn DockerClient::request(
   } noraise {
     c => c
   }
-  defer conn.close()
-  let dec = HttpResponseDecoder::new()
   try {
     match deadline {
       None =>
@@ -144,6 +139,43 @@ pub async fn DockerClient::request(
           conn.write_all(encode_engine_request(verb~, path~, headers~, body~))
         })
     }
+  } catch {
+    err => {
+      conn.close()
+      match err {
+        EngineError::DeadlineExceeded(_) => raise err
+        _ => raise engine_error_of_failure(op~, err)
+      }
+    }
+  } noraise {
+    _ => ()
+  }
+  conn
+}
+
+///|
+/// Send one request and return the decoded response. Any non-2xx status
+/// is classified into `EngineError` via `classify_engine_error`;
+/// transport/decode failures map via `engine_error_of_failure`.
+/// `deadline` bounds connect/write/read on the shared clock — no phase
+/// restarts a timer (issue 0018). `body_limit` bounds the decoded body
+/// (default 64 MiB; smaller values are for tests).
+pub async fn DockerClient::request(
+  self : DockerClient,
+  verb~ : String,
+  path~ : String,
+  op~ : String,
+  context~ : EngineOp = EngineOp::container_lifecycle(),
+  target~ : String = "",
+  headers~ : Array[(String, String)] = [],
+  body~ : Bytes = b"",
+  body_limit~ : Int32 = HTTP_RESPONSE_BODY_LIMIT,
+  deadline? : Deadline,
+) -> HttpResponse {
+  let conn = self.send_request(verb~, path~, op~, headers~, body~, deadline?)
+  defer conn.close()
+  let dec = HttpResponseDecoder::new(max_body=body_limit)
+  try {
     for ;; {
       if dec.is_complete() {
         break

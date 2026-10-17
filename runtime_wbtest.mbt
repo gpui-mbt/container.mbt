@@ -6,6 +6,7 @@ async test "single readiness delay cannot exceed startup deadline" {
     runtime: Docker,
     mappings: [],
     removed: false,
+    resolved_ports: None,
   }
   let start = @async.now()
   let timed_out = try {
@@ -26,6 +27,7 @@ async test "multiple delays respect one readiness budget" {
     runtime: Docker,
     mappings: [],
     removed: false,
+    resolved_ports: None,
   }
   let start = @async.now()
   let timed_out = try {
@@ -46,6 +48,7 @@ async test "readiness receives the remaining run-start time" {
     runtime: Docker,
     mappings: [],
     removed: false,
+    resolved_ports: None,
   }
   let deadline = @async.now() + 240L
   @async.sleep(150)

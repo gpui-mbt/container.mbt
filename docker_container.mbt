@@ -343,12 +343,14 @@ const DOCKER_REMOVE_TIMEOUT_MS : Int32 = 60_000
 
 ///|
 /// Subset of `GET /containers/{id}/json` we act on. Shared snapshot —
-/// 0014 port inspection extends this type rather than re-fetching.
+/// `ports` (issue 0014) is `NetworkSettings.Ports` resolved into
+/// IPv4/IPv6 host-port maps.
 pub struct ContainerInspect {
   running : Bool
   exit_code : Int32?
   /// `Config.Env` as `["KEY=VALUE", ...]` — used by exec env merge (0012).
   env : Array[String]
+  ports : ResolvedPorts
 }
 
 ///|
@@ -398,7 +400,15 @@ pub async fn DockerClient::inspect_container(
               }
             }
           }
-          { running, exit_code, env, }
+          let ports = match m.get("NetworkSettings") {
+            Some(Object(ns)) =>
+              match ns.get("Ports") {
+                Some(p) => ResolvedPorts::parse(p)
+                _ => ResolvedPorts::empty()
+              }
+            _ => ResolvedPorts::empty()
+          }
+          { running, exit_code, env, ports, }
         }
         _ =>
           raise EngineError::MalformedResponse(
@@ -482,6 +492,33 @@ pub async fn DockerClient::remove_container(
   } noraise {
     _ => ()
   }
+}
+
+///|
+
+///|
+/// Inspect then resolve the IPv4 host port for `port` — the API-path
+/// counterpart of `Container::get_host_port_ipv4` (0014). Never returns
+/// 0; unexposed vs exposed-but-unassigned are distinct errors.
+pub async fn DockerClient::get_host_port_ipv4(
+  self : DockerClient,
+  id : String,
+  port : ContainerPort,
+  deadline? : Deadline,
+) -> Int32 {
+  self.inspect_container(id, deadline?).ports.ipv4(port)
+}
+
+///|
+/// IPv6 host port for `port` — only inspect bindings (`HostIp`
+/// containing `:`) count; IPv4 snapshot mappings never do.
+pub async fn DockerClient::get_host_port_ipv6(
+  self : DockerClient,
+  id : String,
+  port : ContainerPort,
+  deadline? : Deadline,
+) -> Int32 {
+  self.inspect_container(id, deadline?).ports.ipv6(port)
 }
 
 ///|

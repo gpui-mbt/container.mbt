@@ -90,6 +90,19 @@ int64_t moonbit_container_unix_socketpair(void) {
   return ((int64_t)(uint32_t)sv[0] << 32) | (int64_t)(uint32_t)sv[1];
 }
 
+// shutdown(fd, SHUT_RDWR): keeps the fd valid but wakes a blocked
+// reader with EOF — the follow-log stop mechanism (upstream uses
+// try_clone + shutdown(Both); our fd is already shared by the session).
+MOONBIT_FFI_EXPORT
+int32_t moonbit_container_unix_shutdown(int32_t fd) {
+  int rc;
+  do {
+    rc = shutdown((int)fd, SHUT_RDWR);
+  } while (rc < 0 && errno == EINTR);
+  if (rc < 0) return -errno;
+  return 0;
+}
+
 MOONBIT_FFI_EXPORT
 int32_t moonbit_container_unix_close(int32_t fd) {
   int rc;
