@@ -68,6 +68,24 @@ pub fn build_run_args(
     args.push("--add-host")
     args.push("\{key}:\{value}")
   }
+  if image.privileged {
+    args.push("--privileged")
+  }
+  for cap in image.cap_add {
+    args.push("--cap-add")
+    args.push(cap)
+  }
+  for cap in image.cap_drop {
+    args.push("--cap-drop")
+    args.push(cap)
+  }
+  if image.shm_size_bytes is Some(bytes) {
+    args.push("--shm-size")
+    args.push(bytes.to_string())
+  }
+  if image.init {
+    args.push("--init")
+  }
   if image.platform is Some(platform) {
     args.push("--platform")
     args.push(platform)

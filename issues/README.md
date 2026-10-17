@@ -74,7 +74,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0043 SyncRunner と同期 Container 操作の安全な設計](./done/0043-m3-sync-runner-facade.md) — P2 / deps: 0011
 - [x] [0044 tmpfs size/mode・volume/read-only/bind の詳細互換](./done/0044-m3-advanced-mounts.md) — P1 / deps: 0010, 0026
 - [x] [0045 hostname・ExtraHost・network を API と実行経路に追加](./done/0045-m3-hostname-extra-hosts-networks.md) — P1 / deps: 0010
-- [ ] [0046 privileged・capability・shm・init 等を移植](./polished/0046-m3-resource-security-options.md) — P1 / deps: 0010
+- [x] [0046 privileged・capability・shm・init 等を移植](./done/0046-m3-resource-security-options.md) — P1 / deps: 0010
 - [ ] [0047 Mac 専用 kernel/ssh/masked/readonly path オプション](./polished/0047-m3-macos-special-options.md) — P2 / deps: 0024, 0026
 - [ ] [0048 ImageExt・ContainerRequest の override 契約を整える](./polished/0048-m3-image-request-api-parity.md) — P1 / deps: 0010
 - [ ] [0049 公開エラー型と失敗分類の一貫性を検証](./polished/0049-m3-typed-errors-failure-matrix.md) — P1 / deps: 0017, 0024

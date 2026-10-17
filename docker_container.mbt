@@ -111,6 +111,12 @@ priv struct CreateRequest {
   hostname : String?
   /// `host:ip` strings for `HostConfig.ExtraHosts` (0045).
   extra_hosts : Array[String]
+  /// 0046 resource/security settings → HostConfig.
+  privileged : Bool
+  cap_add : Array[String]
+  cap_drop : Array[String]
+  shm_size_bytes : Int64?
+  init : Bool
 }
 
 ///|
@@ -183,6 +189,11 @@ fn create_request(image : GenericImage) -> CreateRequest raise {
     network: image.network,
     hostname: image.hostname,
     extra_hosts,
+    privileged: image.privileged,
+    cap_add: image.cap_add.copy(),
+    cap_drop: image.cap_drop.copy(),
+    shm_size_bytes: image.shm_size_bytes,
+    init: image.init,
     readonly_rootfs: image.readonly_rootfs,
     exposed,
     bindings,
@@ -250,9 +261,22 @@ fn CreateRequest::to_json(self : CreateRequest) -> String {
     buf.write_string(escape_json(n))
     buf.write_string(":{}}}")
   }
-  buf.write_string(
-    ",\"HostConfig\":{\"Privileged\":false,\"Init\":false,\"ReadonlyRootfs\":",
-  )
+  buf.write_string(",\"HostConfig\":{\"Privileged\":")
+  buf.write_string(if self.privileged { "true" } else { "false" })
+  buf.write_string(",\"Init\":")
+  buf.write_string(if self.init { "true" } else { "false" })
+  if self.cap_add.length() > 0 {
+    buf.write_string(",\"CapAdd\":")
+    buf.write_string(json_array(self.cap_add))
+  }
+  if self.cap_drop.length() > 0 {
+    buf.write_string(",\"CapDrop\":")
+    buf.write_string(json_array(self.cap_drop))
+  }
+  if self.shm_size_bytes is Some(bytes) {
+    buf.write_string(",\"ShmSize\":\{bytes}")
+  }
+  buf.write_string(",\"ReadonlyRootfs\":")
   buf.write_string(if self.readonly_rootfs { "true" } else { "false" })
   if self.binds.length() > 0 {
     buf.write_string(",\"Binds\":")

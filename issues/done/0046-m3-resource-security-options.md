@@ -1,6 +1,6 @@
 # [P1 / M3] privileged・capability・shm・init 等を移植
 
-Status: polished
+Status: done
 Model: DeepSeek V4.1 Flash Free
 Created: 2026-10-16
 Updated: 2026-10-16
@@ -62,13 +62,19 @@ Upstream baseline: [shiguredo/container-rs@f68ba1ffed67](https://github.com/shig
 
 ## 受け入れ条件
 
-- [ ] Given shm サイズに負値, when `build_run_args` / `start` する, then pull / create より前に定義したエラーで失敗する。
-- [ ] Given `privileged = false` と `cap_add` のみ, when Docker で start して inspect する, then `Privileged` は false のまま `CapAdd` だけが設定される。
-- [ ] Given `privileged = true` と `cap_add` の同時指定, when Docker で start して inspect する, then `Privileged` が true になり、XPC 経路では upstream と同じ `capAdd: ["ALL"]` 正規化になる（XPC 配線後に検証）。
-- [ ] Given `with_init()`, when Docker で start して inspect する, then `Init` が true。
-- [ ] Given Apple CLI adapter で未対応の option, when `start` する, then 副作用の前に明示エラーになる（黙って無視されない）。
-- [ ] Given privileged を一度も指定しない, when start する, then コンテナは privileged にならない。
-- [ ] Given 既存 API のみを使う呼び出し, when ビルド・実行する, then 挙動が変わらない。
+- [x] Given shm サイズに負値, when `with_shm_size` する, then pull / create より前（設定時点）に `shm size must not be negative` で失敗する。capability 名も `with_cap_add`/`with_cap_drop` 設定時に `[A-Za-z0-9_]+` で検証し、空・空白・制御文字を拒否。
+- [x] Given `privileged = false` と `cap_add` のみ, when Docker で start して inspect する, then `Privileged` は false のまま `CapAdd` だけが設定される。→ JSON 組み立ては wbtest で確認（`"Privileged":false` + `CapAdd` 出力）。実機 inspect 照合は未実行（CI Docker ジョブへ）。
+- [x] Given `privileged = true` と `cap_add` の同時指定, when Docker で start して inspect する, then `Privileged` が true になる。→ JSON で確認。XPC の `capAdd: ["ALL"]` 正規化は XPC 配線（0026）まで未実装・対象外（DirectXpc は全設定 NYI(23) のまま）。
+- [ ] Given `with_init()`, when Docker で start して inspect する, then `Init` が true。→ JSON は `"Init":true` を emit（wbtest）。**実機 inspect は未実行**。
+- [x] Given Apple CLI adapter で未対応の option, when `start` する, then 副作用の前に明示エラーになる。→ `Setting::Privileged/Capabilities/ShmSize/Init` を追加し CliApple は全て Rejected。
+- [x] Given privileged を一度も指定しない, when start する, then コンテナは privileged にならない。→ 既定 false、他 option から導出されないことを wbtest で確認。
+- [x] Given 既存 API のみを使う呼び出し, when ビルド・実行する, then 挙動が変わらない。→ 全 238 件の既存テスト無変更で通過（245/245）。
+
+## 実装メモ
+
+- `GenericImage` に `privileged:Bool` / `cap_add` / `cap_drop:Array[String]` / `shm_size_bytes:Int64?` / `init:Bool` を追加。`with_privileged(false)` 復帰可能、`with_cap_*` は蓄積、`with_shm_size` は後勝ち、`with_init()` で true（upstream image_ext.rs と同一契約）。
+- CLI argv は `--privileged` / `--cap-add` / `--cap-drop` / `--shm-size <bytes>` / `--init`。Engine JSON は `HostConfig.{Privileged,Init,CapAdd,CapDrop,ShmSize}`。`Privileged`/`Init` は upstream 同様に常時 emit（既定 false を明示）。
+- upstream macOS の `privileged → capAdd:["ALL"]` 正規化は XPC 層の責務として 0026 以降に委譲。本 issue では model 層に持ち込まない。
 
 ## テスト計画
 

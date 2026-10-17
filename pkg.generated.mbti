@@ -320,6 +320,11 @@ pub struct GenericImage {
   mut user : String?
   mut network : String?
   mut hostname : String?
+  mut privileged : Bool
+  cap_add : Array[String]
+  cap_drop : Array[String]
+  mut shm_size_bytes : Int64?
+  mut init : Bool
   extra_hosts : Array[(String, ExtraHost)]
   mut platform : String?
   mut readonly_rootfs : Bool
@@ -333,6 +338,8 @@ pub async fn GenericImage::start(Self, Runtime) -> Container
 pub async fn GenericImage::start_cli(Self, Runtime) -> Container
 pub async fn GenericImage::start_detected(Self) -> Container
 pub async fn GenericImage::start_with_client(Self, DockerClient) -> Container
+pub fn GenericImage::with_cap_add(Self, String) -> Self raise
+pub fn GenericImage::with_cap_drop(Self, String) -> Self raise
 pub fn GenericImage::with_cmd(Self, Array[String]) -> Self
 pub async fn[T] GenericImage::with_container(Self, Runtime, (Container) -> T raise) -> T
 pub fn GenericImage::with_container_name(Self, String) -> Self
@@ -345,12 +352,15 @@ pub fn GenericImage::with_host(Self, String, ExtraHost) -> Self raise
 pub fn GenericImage::with_host_addr(Self, String, String) -> Self raise
 pub fn GenericImage::with_host_gateway(Self, String) -> Self raise
 pub fn GenericImage::with_hostname(Self, String) -> Self raise
+pub fn GenericImage::with_init(Self) -> Self
 pub fn GenericImage::with_label(Self, String, String) -> Self
 pub fn GenericImage::with_mapped_port(Self, Int, ContainerPort) -> Self raise
 pub fn GenericImage::with_mount(Self, Mount) -> Self
 pub fn GenericImage::with_network(Self, String) -> Self
 pub fn GenericImage::with_platform(Self, String) -> Self
+pub fn GenericImage::with_privileged(Self, Bool) -> Self
 pub fn GenericImage::with_readonly_rootfs(Self, Bool) -> Self
+pub fn GenericImage::with_shm_size(Self, Int64) -> Self raise
 pub fn GenericImage::with_startup_timeout(Self, Int) -> Self raise
 pub fn GenericImage::with_user(Self, String) -> Self
 pub fn GenericImage::with_wait_for(Self, WaitFor) -> Self
@@ -530,6 +540,10 @@ pub enum Setting {
   TmpfsOptions
   Hostname
   ExtraHosts
+  Privileged
+  Capabilities
+  ShmSize
+  Init
 }
 
 pub enum Support {

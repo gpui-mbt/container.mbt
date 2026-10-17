@@ -48,6 +48,14 @@ pub enum Setting {
   Hostname
   /// 0045: --add-host / HostConfig.ExtraHosts entries.
   ExtraHosts
+  /// 0046: privileged mode.
+  Privileged
+  /// 0046: cap_add / cap_drop entries.
+  Capabilities
+  /// 0046: shm size.
+  ShmSize
+  /// 0046: --init.
+  Init
 }
 
 ///|
@@ -78,6 +86,10 @@ fn Setting::name(self : Setting) -> String {
     TmpfsOptions => "tmpfs options"
     Hostname => "hostname"
     ExtraHosts => "extra host"
+    Privileged => "privileged"
+    Capabilities => "capability add/drop"
+    ShmSize => "shm size"
+    Init => "init"
   }
 }
 
@@ -135,7 +147,11 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | CopyTo
         | TmpfsOptions
         | Hostname
-        | ExtraHosts => Supported
+        | ExtraHosts
+        | Privileged
+        | Capabilities
+        | ShmSize
+        | Init => Supported
       }
     CliDocker =>
       match setting {
@@ -163,7 +179,11 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | StartupTimeout
         | TmpfsOptions
         | Hostname
-        | ExtraHosts => Supported
+        | ExtraHosts
+        | Privileged
+        | Capabilities
+        | ShmSize
+        | Init => Supported
       }
     CliApple =>
       match setting {
@@ -195,6 +215,19 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
           Rejected("--hostname is not supported by the Apple container CLI")
         ExtraHosts =>
           Rejected("--add-host is not supported by the Apple container CLI")
+        // `container run` documents no --privileged/--cap-*/--shm-size/
+        // --init flags (0046); XPC maps them on containerCreate (0026).
+        Privileged =>
+          Rejected(
+            "privileged mode is not supported by the Apple container CLI",
+          )
+        Capabilities =>
+          Rejected(
+            "capability add/drop is not supported by the Apple container CLI",
+          )
+        ShmSize =>
+          Rejected("shm size is not supported by the Apple container CLI")
+        Init => Rejected("--init is not supported by the Apple container CLI")
         Command
         | Entrypoint
         | ContainerName
@@ -242,6 +275,18 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
   }
   if image.hostname is Some(_) {
     used.push(Hostname)
+  }
+  if image.privileged {
+    used.push(Privileged)
+  }
+  if image.cap_add.length() > 0 || image.cap_drop.length() > 0 {
+    used.push(Capabilities)
+  }
+  if image.shm_size_bytes is Some(_) {
+    used.push(ShmSize)
+  }
+  if image.init {
+    used.push(Init)
   }
   if image.extra_hosts.length() > 0 {
     used.push(ExtraHosts)

@@ -285,6 +285,11 @@ pub struct GenericImage {
   mut user : String?
   mut network : String?
   mut hostname : String?
+  mut privileged : Bool
+  cap_add : Array[String]
+  cap_drop : Array[String]
+  mut shm_size_bytes : Int64?
+  mut init : Bool
   extra_hosts : Array[(String, ExtraHost)]
   mut platform : String?
   mut readonly_rootfs : Bool
@@ -313,6 +318,11 @@ pub fn GenericImage::new(name : String, tag : String) -> GenericImage raise {
     user: None,
     network: None,
     hostname: None,
+    privileged: false,
+    cap_add: [],
+    cap_drop: [],
+    shm_size_bytes: None,
+    init: false,
     extra_hosts: [],
     platform: None,
     readonly_rootfs: false,
@@ -503,6 +513,76 @@ pub fn GenericImage::with_host(
   }
   self.extra_hosts.push((key, host))
   self
+}
+
+///|
+/// Privileged mode toggle — last call wins, `false` restores the
+/// default (upstream `with_privileged`, 0046). Never implied by any
+/// other option.
+pub fn GenericImage::with_privileged(
+  self : GenericImage,
+  enabled : Bool,
+) -> GenericImage {
+  self.privileged = enabled
+  self
+}
+
+///|
+/// Accumulate a Linux capability grant (upstream `with_cap_add`, 0046).
+/// The name must be non-empty `[A-Za-z0-9_]+` — upstream forwards the
+/// raw string; we validate at set time so failures precede any pull.
+pub fn GenericImage::with_cap_add(
+  self : GenericImage,
+  name : String,
+) -> GenericImage raise {
+  guard valid_capability_name(name) else {
+    fail("invalid capability name: \{name}")
+  }
+  self.cap_add.push(name)
+  self
+}
+
+///|
+/// Accumulate a Linux capability drop (upstream `with_cap_drop`, 0046).
+pub fn GenericImage::with_cap_drop(
+  self : GenericImage,
+  name : String,
+) -> GenericImage raise {
+  guard valid_capability_name(name) else {
+    fail("invalid capability name: \{name}")
+  }
+  self.cap_drop.push(name)
+  self
+}
+
+///|
+/// `/dev/shm` size in bytes — last call wins (upstream `with_shm_size`
+/// takes u64; negative values raise instead of being unreprentable).
+pub fn GenericImage::with_shm_size(
+  self : GenericImage,
+  bytes : Int64,
+) -> GenericImage raise {
+  guard bytes >= 0 else { fail("shm size must not be negative") }
+  self.shm_size_bytes = Some(bytes)
+  self
+}
+
+///|
+/// Run an init inside the container (upstream `with_init`, 0046).
+pub fn GenericImage::with_init(self : GenericImage) -> GenericImage {
+  self.init = true
+  self
+}
+
+///|
+/// Docker capability names: `SYS_ADMIN`, `CAP_NET_RAW`, bare
+/// alnum+underscore (leading CAP_ optional upstream — the daemon
+/// normalizes either form).
+fn valid_capability_name(name : String) -> Bool {
+  name.length() > 0 &&
+  !name
+  .iter()
+  .any(fn(c) { !(c is ('A'..<='Z' | 'a'..<='z' | '0'..<='9' | '_')) })
 }
 
 ///|
