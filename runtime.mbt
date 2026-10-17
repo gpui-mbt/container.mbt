@@ -586,6 +586,7 @@ async fn Container::wait_ready_until(
         self.wait_for_log_until(message, "both", deadline)
       Healthcheck | Exit =>
         fail("readiness strategy is not implemented by the CLI adapters")
+      Http(strategy) => self.http_wait_until(strategy, deadline)
     }
   }
   ignore(startup_remaining_ms(deadline))

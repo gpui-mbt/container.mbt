@@ -33,6 +33,7 @@ pub enum Setting {
   ReadyWait
   HealthcheckWait
   ExitWait
+  HttpWait
   WorkingDir
   User
   Network
@@ -60,6 +61,7 @@ fn Setting::name(self : Setting) -> String {
     ReadyWait => "log/duration wait"
     HealthcheckWait => "healthcheck"
     ExitWait => "exit"
+    HttpWait => "http wait"
     WorkingDir => "working dir"
     User => "user"
     Network => "network"
@@ -114,6 +116,7 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
         | SctpPort
         | Mounts
         | ReadyWait
+        | HttpWait
         | WorkingDir
         | User
         | Network
@@ -126,6 +129,7 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
       match setting {
         HealthcheckWait => NotYetImplemented(37)
         ExitWait => NotYetImplemented(38)
+        HttpWait => NotYetImplemented(36)
         // docker cp is a CLI-binary path; the M1+ contract is
         // archive-API only, so CLI copy-to stays unimplemented.
         CopyTo => NotYetImplemented(33)
@@ -163,6 +167,7 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
           Rejected("--read-only is not yet verified on Apple Container")
         HealthcheckWait => NotYetImplemented(37)
         ExitWait => NotYetImplemented(38)
+        HttpWait => NotYetImplemented(36)
         CopyTo => NotYetImplemented(33)
         Command
         | Entrypoint
@@ -219,6 +224,7 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
         used.push(ReadyWait)
       Healthcheck => used.push(HealthcheckWait)
       Exit => used.push(ExitWait)
+      Http(_) => used.push(HttpWait)
     }
   }
   if image.working_dir is Some(_) {

@@ -41,6 +41,7 @@ pub enum WaitFor {
   MessageOnEither(String)
   Healthcheck
   Exit
+  Http(HttpWaitStrategy)
 }
 
 ///|
@@ -58,6 +59,15 @@ pub fn WaitFor::healthcheck() -> WaitFor {
 /// Explicitly request an exit wait. CLI runtime adapters fail before launch.
 pub fn WaitFor::when_exited() -> WaitFor {
   Exit
+}
+
+///|
+/// HTTP/1.1 readiness on a published port (issue 0036). Plain HTTP
+/// only — TLS is intentionally unsupported and a TLS listener will
+/// classify as a non-HTTP response until the deadline. CLI adapters
+/// reject this before launch.
+pub fn WaitFor::http(strategy : HttpWaitStrategy) -> WaitFor {
+  Http(strategy)
 }
 
 ///|
