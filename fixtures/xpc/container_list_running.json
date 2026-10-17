@@ -1,0 +1,19 @@
+[
+  {
+    "id": "container-mbt-xpc-fixture",
+    "status": "running",
+    "configuration": {
+      "publishedPorts": [
+        {"hostAddress": "0.0.0.0", "hostPort": 49152, "containerPort": 80, "proto": "tcp"},
+        {"hostAddress": "::", "hostPort": 49153, "containerPort": 81, "proto": "tcp"}
+      ]
+    },
+    "networks": [
+      {
+        "network": "default",
+        "ipv4Address": "192.168.64.2/24",
+        "ipv4Gateway": "192.168.64.1/24"
+      }
+    ]
+  }
+]

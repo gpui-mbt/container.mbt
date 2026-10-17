@@ -32,6 +32,22 @@ pub const LOG_LINE_MAX_BYTES : Int = 8388608
 
 pub const MIN_DOCKER_API_VERSION : String = "1.24"
 
+pub const XPC_DEFAULT_TIMEOUT_MS : Int = 60000
+
+pub const XPC_ERROR_KEY : String = "com.apple.container.xpc.error"
+
+pub const XPC_IMAGE_SERVICE : String = "com.apple.container.core.container-core-images"
+
+pub const XPC_LONG_TIMEOUT_MS : Int = 86400000
+
+pub const XPC_ROUTE_KEY : String = "com.apple.container.xpc.route"
+
+pub const XPC_SERVICE : String = "com.apple.container.apiserver"
+
+pub async fn bootstrap_container(String) -> Unit
+
+pub async fn build_container_config(GenericImage, String, String, ImageConfig) -> Json
+
 pub fn build_exec_args(String, Array[String]) -> Array[String]
 
 pub fn build_inspect_args(String) -> Array[String]
@@ -48,19 +64,75 @@ pub fn capability(Adapter, Setting) -> Support
 
 pub fn classify_engine_error(op~ : String, context~ : EngineOp, status~ : Int, body~ : Bytes, target? : String, path? : String) -> EngineError
 
+pub fn classify_failure(Error) -> FailureKind
+
+pub async fn container_is_running(String) -> Bool
+
+pub async fn content_get(String) -> Bytes
+
+pub async fn copy_in(String, String, String, Int) -> Unit
+
+pub fn count_open_fds() -> Int
+
+pub async fn create_container(Json, Bytes?) -> Unit
+
 pub async fn detect_runtime() -> Runtime
+
+pub fn effective_command(ImageConfig, String?, Array[String]) -> (String, Array[String]) raise
 
 pub fn engine_error_of_failure(op~ : String, Error) -> EngineError
 
 pub async fn ensure_owner_lock() -> String
 
+pub async fn exec_process(XpcContainer, Array[String], Array[(String, String)]) -> ProcessOutput
+
+pub async fn inspect_container(String) -> Json?
+
+pub fn is_apple() -> Bool
+
+pub fn kernel_json(String) -> Bytes
+
+pub async fn list_containers(String?) -> Array[Json]
+
+pub async fn list_images() -> Array[(String, String)]
+
+pub async fn logs_fds(String) -> (Int, Int)
+
+pub fn normalize_image_reference(String) -> String
+
+pub fn pipe_pair() -> (Int, Int) raise
+
 pub fn process_pid() -> Int
 
 pub fn process_uid() -> Int
 
+pub async fn pull_image(String, String?) -> Unit
+
+pub async fn read_logs(XpcContainer, Int, Int) -> ProcessOutput
+
+pub fn redact_secret(String) -> String
+
+pub fn register_xpc(XpcContainer) -> Unit
+
 pub fn release_lock(Int) -> Unit
 
+pub async fn remove_container(String, Bool) -> Unit
+
+pub async fn resolve_image_config(String, String?) -> ImageConfig
+
+pub async fn resolve_or_pull(String, String?) -> String
+
+pub async fn resolve_volume(String) -> VolumeResolution
+
 pub let scope_cleanup_failures : Array[String]
+
+pub async fn send(service~ : String, route~ : String, entries? : Array[(String, XpcValue)], timeout_ms? : Int) -> XpcReply
+
+pub fn set_nonblock(Int) -> Unit
+
+pub async fn start_process(String, String) -> Unit
+
+pub async fn stop_container(String, Int?) -> Unit
 
 pub fn try_owner_lock(String) -> Int? raise
 
@@ -73,6 +145,12 @@ pub fn unix_listen(String, backlog? : Int) -> Int raise
 pub async fn unix_socket_from_fd(Int) -> UnixSocket
 
 pub fn unix_socketpair() -> (Int, Int) raise
+
+pub fn unregister_xpc(String) -> Unit
+
+pub async fn wait_process(String, String, Int) -> Int64
+
+pub fn xpc_for(String) -> XpcContainer?
 
 // Errors
 pub(all) suberror EngineError {
@@ -125,6 +203,23 @@ pub fn SocketConnectError::output(Self, &Logger) -> Unit
 pub fn SocketConnectError::to_string(Self) -> String
 pub impl Show for SocketConnectError
 
+pub(all) suberror XpcError {
+  NotApple
+  Connect
+  Timeout
+  Closed
+  Remote(code~ : String, message~ : String)
+  Malformed(detail~ : String)
+  NonUtf8
+  MissingKey(key~ : String)
+  TypeMismatch(key~ : String, expected~ : String)
+  Allocation
+}
+pub fn XpcError::describe(Self) -> String
+pub fn XpcError::output(Self, &Logger) -> Unit
+pub fn XpcError::to_string(Self) -> String
+pub impl Show for XpcError
+
 // Types and methods
 pub enum AccessMode {
   ReadOnly
@@ -137,6 +232,20 @@ pub enum Adapter {
   CliDocker
   CliApple
 }
+
+pub(all) enum ClientFailure {
+  Connect
+  Protocol
+  Timeout
+  Authentication
+  ImageNotFound
+  ContainerNotFound
+  ContainerPathNotFound
+  Configuration
+  Json
+  Other
+}
+pub fn ClientFailure::name(Self) -> String
 
 pub enum CmdWaitFor {
   Nothing
@@ -164,6 +273,7 @@ pub async fn Container::exec(Self, Array[String]) -> ProcessOutput
 pub async fn Container::exec_wait(Self, Array[String], wait? : CmdWaitFor, timeout_ms? : Int) -> ProcessOutput
 pub async fn Container::exit_code(Self) -> Int?
 pub async fn Container::get_bridge_ip_address(Self) -> String
+pub async fn Container::get_host_gateway_address(Self) -> String
 pub async fn Container::get_host_port_ipv4(Self, ContainerPort) -> Int
 pub async fn Container::get_host_port_ipv6(Self, ContainerPort) -> Int
 pub fn Container::id(Self) -> String
@@ -190,7 +300,9 @@ pub struct ContainerNetworks {
 }
 pub fn ContainerNetworks::bridge_ip(Self, container_id~ : String) -> String raise
 pub fn ContainerNetworks::empty() -> Self
+pub fn ContainerNetworks::gateway_ip(Self, container_id~ : String) -> String raise
 pub fn ContainerNetworks::parse(Json) -> Self
+pub fn ContainerNetworks::parse_xpc(Json) -> Self
 
 pub struct ContainerPort {
   number : Int
@@ -303,6 +415,16 @@ pub enum ExtraHost {
   HostGateway
 }
 
+pub(all) enum FailureKind {
+  Client(ClientFailure)
+  WaitContainer
+  PortNotExposed
+  Exec
+  Io
+  Other
+}
+pub fn FailureKind::name(Self) -> String
+
 pub struct GenericImage {
   mut name : String
   mut tag : String
@@ -329,6 +451,10 @@ pub struct GenericImage {
   mut platform : String?
   mut readonly_rootfs : Bool
   copy_to : Array[CopyTarget]
+  mut ssh : Bool
+  mut masked_paths : Array[String]?
+  mut readonly_paths : Array[String]?
+  mut kernel : String?
 }
 pub fn GenericImage::descriptor(Self) -> String
 pub fn GenericImage::mappings(Self) -> Array[PortMapping]
@@ -338,6 +464,7 @@ pub async fn GenericImage::start(Self, Runtime) -> Container
 pub async fn GenericImage::start_cli(Self, Runtime) -> Container
 pub async fn GenericImage::start_detected(Self) -> Container
 pub async fn GenericImage::start_with_client(Self, DockerClient) -> Container
+pub async fn GenericImage::start_with_xpc(Self) -> Container
 pub fn GenericImage::with_cap_add(Self, String) -> Self raise
 pub fn GenericImage::with_cap_drop(Self, String) -> Self raise
 pub fn GenericImage::with_cmd(Self, Array[String]) -> Self
@@ -353,17 +480,21 @@ pub fn GenericImage::with_host_addr(Self, String, String) -> Self raise
 pub fn GenericImage::with_host_gateway(Self, String) -> Self raise
 pub fn GenericImage::with_hostname(Self, String) -> Self raise
 pub fn GenericImage::with_init(Self) -> Self
+pub fn GenericImage::with_kernel(Self, String) -> Self
 pub fn GenericImage::with_label(Self, String, String) -> Self
 pub fn GenericImage::with_labels(Self, Array[(String, String)]) -> Self
 pub fn GenericImage::with_mapped_port(Self, Int, ContainerPort) -> Self raise
+pub fn GenericImage::with_masked_paths(Self, Array[String]) -> Self
 pub fn GenericImage::with_mount(Self, Mount) -> Self
 pub fn GenericImage::with_name(Self, String) -> Self raise
 pub fn GenericImage::with_network(Self, String) -> Self
 pub fn GenericImage::with_platform(Self, String) -> Self
 pub fn GenericImage::with_privileged(Self, Bool) -> Self
+pub fn GenericImage::with_readonly_paths(Self, Array[String]) -> Self
 pub fn GenericImage::with_readonly_rootfs(Self, Bool) -> Self
 pub fn GenericImage::with_ready_conditions(Self, Array[WaitFor]) -> Self
 pub fn GenericImage::with_shm_size(Self, Int64) -> Self raise
+pub fn GenericImage::with_ssh(Self) -> Self
 pub fn GenericImage::with_startup_timeout(Self, Int) -> Self raise
 pub fn GenericImage::with_tag(Self, String) -> Self raise
 pub fn GenericImage::with_user(Self, String) -> Self
@@ -427,6 +558,11 @@ pub fn HttpWaitStrategy::with_request_header(Self, String, String) -> Self
 pub fn HttpWaitStrategy::with_request_timeout(Self, Int) -> Self
 pub fn HttpWaitStrategy::with_verb(Self, String) -> Self
 
+pub struct ImageConfig {
+  entrypoint : Array[String]?
+  cmd : Array[String]?
+}
+
 pub struct ListedContainer {
   id : String
   name : String
@@ -438,6 +574,9 @@ pub struct LogFrame {
   data : Bytes
   truncated : Bool
 }
+pub fn LogFrame::data(Self) -> Bytes
+pub fn LogFrame::stream(Self) -> String
+pub fn LogFrame::truncated(Self) -> Bool
 
 pub struct LogSubscription {
   // private fields
@@ -501,6 +640,7 @@ pub fn ResolvedPorts::empty() -> Self
 pub fn ResolvedPorts::ipv4(Self, ContainerPort) -> Int raise
 pub fn ResolvedPorts::ipv6(Self, ContainerPort) -> Int raise
 pub fn ResolvedPorts::parse(Json) -> Self
+pub fn ResolvedPorts::parse_xpc(Json) -> Self
 
 pub struct RunAttempt {
   name : String
@@ -548,6 +688,10 @@ pub enum Setting {
   Capabilities
   ShmSize
   Init
+  Ssh
+  MaskedPaths
+  ReadonlyPaths
+  Kernel
 }
 
 pub enum Support {
@@ -584,6 +728,8 @@ pub async fn UnixSocketTransport::connect(Self) -> UnixSocket
 pub async fn UnixSocketTransport::exchange(Self, Bytes) -> Bytes
 pub fn UnixSocketTransport::new(socket_path? : String, connect_timeout_ms? : Int) -> Self
 
+type VolumeResolution
+
 pub enum WaitFor {
   Nothing
   Millis(Int)
@@ -603,8 +749,50 @@ pub fn WaitFor::message_on_stdout(String) -> Self
 pub fn WaitFor::millis(Int) -> Self
 pub fn WaitFor::millis_in_env_var(String) -> Self
 pub fn WaitFor::nothing() -> Self
-pub fn WaitFor::seconds(Int) -> Self
+pub fn WaitFor::seconds(Int) -> Self raise
 pub fn WaitFor::when_exited() -> Self
+
+pub struct XpcConnection {
+  // private fields
+}
+pub fn XpcConnection::close(Self) -> Unit
+pub fn XpcConnection::connect(String) -> Self raise
+
+pub struct XpcContainer {
+  id : String
+  env : Array[String]
+}
+
+pub struct XpcMessage {
+  // private fields
+}
+pub fn XpcMessage::close(Self) -> Unit
+pub fn XpcMessage::new() -> Self raise
+pub fn XpcMessage::set(Self, String, XpcValue) -> Unit raise
+
+pub struct XpcReply {
+  // private fields
+}
+pub fn XpcReply::bool(Self, String) -> Bool raise
+pub fn XpcReply::close(Self) -> Unit
+pub fn XpcReply::data(Self, String) -> Bytes raise
+pub fn XpcReply::data_opt(Self, String) -> Bytes? raise
+pub fn XpcReply::error_description(Self) -> String
+pub fn XpcReply::int64(Self, String) -> Int64 raise
+pub fn XpcReply::is_error(Self) -> Bool
+pub fn XpcReply::log_fds(Self) -> (Int, Int) raise
+pub fn XpcReply::string(Self, String) -> String raise
+pub fn XpcReply::string_opt(Self, String) -> String? raise
+pub fn XpcReply::uint64(Self, String) -> UInt64 raise
+
+pub(all) enum XpcValue {
+  Str(String)
+  Data(Bytes)
+  Bool(Bool)
+  Int64(Int64)
+  UInt64(UInt64)
+  Fd(Int)
+}
 
 // Type aliases
 

@@ -21,8 +21,8 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 ### M0 — CLI M0 受入・安全性 (5件)
 
 - [x] [0001 CLI run が ID を返す前に失敗した場合の orphan 回収](./done/0001-m0-run-failure-orphan-cleanup.md) — P0
-- [ ] [0002 Apple Silicon 実機で M0 CLI smoke を完走する](./polished/0002-m0-apple-cli-physical-e2e.md) — P0 / deps: 0001
-- [ ] [0003 Apple CLI 固定 published port の TCP 到達を検証](./polished/0003-m0-apple-host-tcp-forwarding.md) — P1 / deps: 0002
+- [x] [0002 Apple Silicon 実機で M0 CLI smoke を完走する](./done/0002-m0-apple-cli-physical-e2e.md) — P0 / deps: 0001
+- [x] [0003 Apple CLI 固定 published port の TCP 到達を検証](./done/0003-m0-apple-host-tcp-forwarding.md) — P1 / deps: 0002
 - [x] [0004 CLI adapter の非対応設定を副作用前に明示拒否する](./done/0004-m0-runtime-option-preflight.md) — P1
 - [x] [0005 CLI 起動・readiness・cleanup の回帰テストを固定する](./done/0005-m0-cli-lifecycle-regression.md) — P1 / deps: 0001
 
@@ -30,7 +30,7 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 
 - [x] [0006 Node/Rust に依存しない Docker Unix socket transport](./done/0006-m1-docker-unix-socket-transport.md) — P0
 - [x] [0007 Docker HTTP/1.1 応答・chunked・stream decoder を実装](./done/0007-m1-docker-http-framing-parser.md) — P0 / deps: 0006
-- [ ] [0008 Docker API version・daemon readiness の判定を追加](./polished/0008-m1-docker-daemon-version-preflight.md) — P1 / deps: 0006, 0007
+- [x] [0008 Docker API version・daemon readiness の判定を追加](./done/0008-m1-docker-daemon-version-preflight.md) — P1 / deps: 0006, 0007
 - [x] [0009 Docker Engine API の image pull と progress/error を実装](./done/0009-m1-native-image-pull.md) — P0 / deps: 0006, 0007
 - [x] [0010 Docker Engine API の create/start と request serialization](./done/0010-m1-docker-create-start.md) — P0 / deps: 0006, 0007, 0009
 - [x] [0011 Docker inspect/stop/rm/wait と冪等 lifecycle を移植](./done/0011-m1-docker-inspect-stop-rm-wait.md) — P0 / deps: 0010
@@ -48,16 +48,16 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 
 ### M2 — macOS Apple Container XPC (10件)
 
-- [ ] [0023 Apple Container XPC の MoonBit-native FFI 境界を確定](./polished/0023-m2-apple-native-xpc-bridge.md) — P0
-- [ ] [0024 XPC request/response・型/バージョン契約を移植](./polished/0024-m2-xpc-protocol-contract.md) — P0 / deps: 0023
-- [ ] [0025 Apple XPC image pull・参照/manifest の確認](./polished/0025-m2-xpc-image-pull.md) — P1 / deps: 0024
-- [ ] [0026 Apple XPC container create/start と rollback](./polished/0026-m2-xpc-create-start.md) — P0 / deps: 0024, 0025
-- [ ] [0027 Apple XPC stop/remove と idempotent cleanup](./polished/0027-m2-xpc-stop-remove.md) — P0 / deps: 0026
-- [ ] [0028 Apple XPC exec と stdout/stderr/exit code を取得](./polished/0028-m2-xpc-exec.md) — P1 / deps: 0026, 0024
-- [ ] [0029 Apple XPC logs の FD 所有権と停止処理](./polished/0029-m2-xpc-logs-fd-ownership.md) — P0 / deps: 0026, 0024
-- [ ] [0030 Apple XPC port mapping・bridge IP・host gateway](./polished/0030-m2-xpc-ports-network-inspect.md) — P1 / deps: 0026
-- [ ] [0031 Apple XPC bind/volume/tmpfs とコピーの互換検証](./polished/0031-m2-xpc-mount-copy.md) — P1 / deps: 0026
-- [ ] [0032 macOS 26 Apple Silicon の XPC native 受入試験](./polished/0032-m2-apple-native-xpc-e2e.md) — P0 / deps: 0026, 0027, 0028, 0029, 0030
+- [x] [0023 Apple Container XPC の MoonBit-native FFI 境界を確定](./done/0023-m2-apple-native-xpc-bridge.md) — P0
+- [x] [0024 XPC request/response・型/バージョン契約を移植](./done/0024-m2-xpc-protocol-contract.md) — P0 / deps: 0023
+- [x] [0025 Apple XPC image pull・参照/manifest の確認](./done/0025-m2-xpc-image-pull.md) — P1 / deps: 0024
+- [x] [0026 Apple XPC container create/start と rollback](./done/0026-m2-xpc-create-start.md) — P0 / deps: 0024, 0025
+- [x] [0027 Apple XPC stop/remove と idempotent cleanup](./done/0027-m2-xpc-stop-remove.md) — P0 / deps: 0026
+- [x] [0028 Apple XPC exec と stdout/stderr/exit code を取得](./done/0028-m2-xpc-exec.md) — P1 / deps: 0026, 0024
+- [x] [0029 Apple XPC logs の FD 所有権と停止処理](./done/0029-m2-xpc-logs-fd-ownership.md) — P0 / deps: 0026, 0024
+- [x] [0030 Apple XPC port mapping・bridge IP・host gateway](./done/0030-m2-xpc-ports-network-inspect.md) — P1 / deps: 0026
+- [x] [0031 Apple XPC bind/volume/tmpfs とコピーの互換検証](./done/0031-m2-xpc-mount-copy.md) — P1 / deps: 0026
+- [x] [0032 macOS 26 Apple Silicon の XPC native 受入試験](./done/0032-m2-apple-native-xpc-e2e.md) — P0 / deps: 0026, 0027, 0028, 0029, 0030
 
 ### M3 — 機能パリティ・品質・配布 (22件)
 
@@ -75,14 +75,14 @@ Upstream pinned baseline: [shiguredo/container-rs `f68ba1ffed67c9c4e9abdb3921283
 - [x] [0044 tmpfs size/mode・volume/read-only/bind の詳細互換](./done/0044-m3-advanced-mounts.md) — P1 / deps: 0010, 0026
 - [x] [0045 hostname・ExtraHost・network を API と実行経路に追加](./done/0045-m3-hostname-extra-hosts-networks.md) — P1 / deps: 0010
 - [x] [0046 privileged・capability・shm・init 等を移植](./done/0046-m3-resource-security-options.md) — P1 / deps: 0010
-- [ ] [0047 Mac 専用 kernel/ssh/masked/readonly path オプション](./polished/0047-m3-macos-special-options.md) — P2 / deps: 0024, 0026
+- [x] [0047 Mac 専用 kernel/ssh/masked/readonly path オプション](./done/0047-m3-macos-special-options.md) — P2 / deps: 0024, 0026
 - [x] [0048 ImageExt・ContainerRequest の override 契約を整える](./done/0048-m3-image-request-api-parity.md) — P1 / deps: 0010
-- [ ] [0049 公開エラー型と失敗分類の一貫性を検証](./polished/0049-m3-typed-errors-failure-matrix.md) — P1 / deps: 0017, 0024
-- [ ] [0050 Rust upstream と MoonBit の同一 fixture 比較基盤](./polished/0050-m3-conformance-oracle.md) — P0 / deps: 0020, 0032
+- [x] [0049 公開エラー型と失敗分類の一貫性を検証](./done/0049-m3-typed-errors-failure-matrix.md) — P1 / deps: 0017, 0024
+- [x] [0050 Rust upstream と MoonBit の同一 fixture 比較基盤](./done/0050-m3-conformance-oracle.md) — P0 / deps: 0020, 0032
 - [x] [0051 Mooncakes consumer から使える公開 API・文書・配布](./done/0051-m3-consumer-docs-publish.md) — P2 / deps: 0048
-- [ ] [0052 Linux/Mac の実証と compile-only を区別する CI](./polished/0052-m3-ci-platform-matrix.md) — P1 / deps: 0020, 0032
-- [ ] [0053 pinned upstream からの API/挙動 drift を追跡する](./polished/0053-m3-upstream-revision-drift.md) — P2 / deps: 0050
-- [ ] [0054 argv/JSON/path/ログの不正入力と資源リークを系統検証](./polished/0054-m3-input-validation-and-leak-fuzz.md) — P1 / deps: 0010, 0024
+- [x] [0052 Linux/Mac の実証と compile-only を区別する CI](./done/0052-m3-ci-platform-matrix.md) — P1 / deps: 0020, 0032
+- [x] [0053 pinned upstream からの API/挙動 drift を追跡する](./done/0053-m3-upstream-revision-drift.md) — P2 / deps: 0050
+- [x] [0054 argv/JSON/path/ログの不正入力と資源リークを系統検証](./done/0054-m3-input-validation-and-leak-fuzz.md) — P1 / deps: 0010, 0024
 
 ## 着手順の目安
 

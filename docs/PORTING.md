@@ -7,16 +7,16 @@ Upstream reference: `shiguredo/container-rs@f68ba1ffed67c9c4e9abdb39212835d50d7a
 | GenericImage / descriptor / CMD / env overrides | Yes | Implemented, pure MoonBit | Expand upstream regression fixtures |
 | TCP/UDP/SCTP port type | Yes | Implemented, checked range | Add string parsing and native port inspection |
 | ContainerRequest / labels / mounts | Yes | Partial, CLI args | Expand settings and parity contract |
-| Apple Container on macOS | XPC native bridge | CLI adapter only, unverified | Port XPC request/response and fd handling; Apple Silicon E2E |
+| Apple Container on macOS | XPC native bridge | Native XPC adapter: pull/resolve, create/bootstrap/start, exec, logs FD ownership, stop/remove, dynamic ports, bridge/gateway, bind/tmpfs/volume mounts, post-start copy, masked/readonly paths, SSH, custom kernel; CLI adapter retained | Verified on Apple Container 1.5.0 |
 | Linux containers | Docker Engine HTTP over Unix socket | Direct Engine transport (pull/create/start/inspect/stop/rm/wait/exec/logs); CLI adapter retained for Apple | Real daemon E2E in CI (issue 0020) |
-| Start / exec / stop / rm / logs | Async + sync APIs | Engine API + async CLI methods | Real runtime E2E, bounded output follow modes |
+| Start / exec / stop / rm / logs | Async + sync APIs | Engine API, XPC adapter, async CLI methods; exec bounded to 64 MiB; XPC live log subscription | Docker daemon E2E in CI; Apple XPC E2E PASS (1.5.0) |
 | Readiness | log / duration / HTTP / health / exit | log, duration and HTTP (`WaitFor::http`: status/header/body matchers, IPv4-then-IPv6 port pick, plain TCP only — no TLS) | Healthcheck/exit strategies, timeout and cancellation sweeps |
-| Dynamic host port / bridge IP | Yes | Implemented via `NetworkSettings.Ports`/`Networks` inspection (IPv4/IPv6, protocol-aware) | Real-daemon verification in CI |
+| Dynamic host port / bridge IP | Yes | Docker inspect resolution and XPC `publishedPorts`/`networks` parsing (IPv4/IPv6, hostPort=0 pre-allocation, bridge/gateway) | Docker daemon E2E in CI; Apple dynamic-port TCP E2E PASS |
 | Registry auth | Static `auths` (`DOCKER_AUTH_CONFIG`/`DOCKER_CONFIG`/`~/.docker`) | Implemented; `X-Registry-Auth` on pull/resolve. Credential helpers (`credsStore`/`credHelpers`) intentionally unsupported | Private-registry E2E in CI |
-| Copy to/from container | `PUT`/`GET /containers/{id}/archive` | Implemented on the direct adapter: `with_copy_to` (create→archive→start, in-memory tar ≤ 64 MiB and ≤ 4096 entries (ARCHIVE_MAX_ENTRIES), parents 0o755, rollback on failure) and `copy_file_from`/`copy_file_to_host` (first-entry ustar parse, dir/link/gzip/truncation rejected, 404 splits path-missing vs container-missing) | Real-daemon E2E in CI; path-security sweep (0035) |
-| Graceful cleanup / keep | Drop / explicit rm / watchdog | `with_container` scope cleanup + EOF reaper watchdog (Docker CLI path) + explicit rm | Apple parity pending M2 |
+| Copy to/from container | `PUT`/`GET /containers/{id}/archive`; XPC `containerCopyIn` | Docker: `with_copy_to` (create→archive→start, in-memory tar ≤ 64 MiB and ≤ 4096 entries) and `copy_file_from`/`copy_file_to_host`. XPC: post-start `containerCopyIn` (File/Data temp file, mode, createParents) | Docker E2E in CI; XPC copy-in PASS on 1.5.0 (Data and File) |
+| Graceful cleanup / keep | Drop / explicit rm / watchdog | `with_container` scope cleanup + EOF reaper watchdog (Docker CLI path) + explicit rm; XPC start uses errdefer rollback and explicit rm | XPC crash watchdog parity not implemented |
 | Networking / platform / permissions | Broad feature coverage | Small subset | Add separately with host-specific tests |
-| Mac/Ubuntu E2E | Extensive | Linux Docker lifecycle smoke in CI; macOS pending | Native runners and host observability |
+| Mac/Ubuntu E2E | Extensive | Linux Docker smoke/E2E in CI; Apple M0 CLI and XPC native E2E PASS on physical Apple Silicon (1.5.0) | Keep host/version evidence in docs/evidence |
 
 ## Architecture
 

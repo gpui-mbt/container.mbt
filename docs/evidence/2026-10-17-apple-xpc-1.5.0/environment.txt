@@ -1,0 +1,19 @@
+# Apple Container 1.5.0 evidence (2026-10-17)
+
+arm64
+ProductName:		macOS
+ProductVersion:		26.5.2
+BuildVersion:		25F84
+
+container CLI version 1.5.0 (build: release, commit: d265d66)
+COMPONENT            VERSION  BUILD    COMMIT
+container            1.5.0    release  d265d669ecae041bf338cb3b39c4118316d138f0
+container-apiserver  1.5.0    release  d265d669ecae041bf338cb3b39c4118316d138f0
+
+## system status (known launchd-reporting quirk)
+apiserver is not running and not registered with launchd
+
+## Before containers
+ID  IMAGE  OS  ARCH  STATE  IP  CPUS  MEMORY  STARTED
+## Before volumes
+NAME  TYPE  DRIVER  OPTIONS

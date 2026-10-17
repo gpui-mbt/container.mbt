@@ -56,6 +56,14 @@ pub enum Setting {
   ShmSize
   /// 0046: --init.
   Init
+  /// 0047: Apple-only SSH access.
+  Ssh
+  /// 0047: Apple-only masked paths.
+  MaskedPaths
+  /// 0047: Apple-only read-only paths.
+  ReadonlyPaths
+  /// 0047: Apple-only custom kernel.
+  Kernel
 }
 
 ///|
@@ -90,6 +98,10 @@ fn Setting::name(self : Setting) -> String {
     Capabilities => "capability add/drop"
     ShmSize => "shm size"
     Init => "init"
+    Ssh => "ssh"
+    MaskedPaths => "masked paths"
+    ReadonlyPaths => "read-only paths"
+    Kernel => "kernel"
   }
 }
 
@@ -121,10 +133,23 @@ pub enum Support {
 pub fn capability(adapter : Adapter, setting : Setting) -> Support {
   match adapter {
     DirectXpc =>
-      // M2 (issues 0023–0032) has not landed; nothing is supported yet.
-      NotYetImplemented(23)
+      match setting {
+        SctpPort =>
+          Rejected("SCTP port publishing is not supported on Apple container")
+        HealthcheckWait =>
+          Rejected("Apple Container does not run Docker healthchecks")
+        ExtraHosts =>
+          Rejected("extra hosts are not supported by the Apple Container XPC adapter")
+        _ => Supported
+      }
     DirectDocker =>
       match setting {
+        Ssh => Rejected("with_ssh() is not implemented on Linux")
+        MaskedPaths =>
+          Rejected("with_masked_paths() is not implemented on Linux")
+        ReadonlyPaths =>
+          Rejected("with_readonly_paths() is not implemented on Linux")
+        Kernel => Rejected("with_kernel() is not implemented on Linux")
         Command
         | Entrypoint
         | ContainerName
@@ -155,6 +180,12 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
       }
     CliDocker =>
       match setting {
+        Ssh => Rejected("with_ssh() is not implemented on Linux")
+        MaskedPaths =>
+          Rejected("with_masked_paths() is not implemented on Linux")
+        ReadonlyPaths =>
+          Rejected("with_readonly_paths() is not implemented on Linux")
+        Kernel => Rejected("with_kernel() is not implemented on Linux")
         HealthcheckWait => NotYetImplemented(37)
         ExitWait => NotYetImplemented(38)
         HttpWait => NotYetImplemented(36)
@@ -187,6 +218,12 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
       }
     CliApple =>
       match setting {
+        Ssh => Rejected("ssh is not supported by the Apple container CLI")
+        MaskedPaths =>
+          Rejected("masked paths are not supported by the Apple container CLI")
+        ReadonlyPaths =>
+          Rejected("read-only paths are not supported by the Apple container CLI")
+        Kernel => Rejected("custom kernel is not supported by the Apple container CLI")
         DynamicPort =>
           Rejected(
             "automatic host port assignment is not yet verified on Apple Container; use with_mapped_port",
@@ -242,6 +279,19 @@ pub fn capability(adapter : Adapter, setting : Setting) -> Support {
 }
 
 ///|
+/// NUL and other ASCII control characters are rejected for keys and
+/// paths before they can reach a process or JSON payload.
+fn contains_control(value : String) -> Bool {
+  for c in value {
+    let n = c.to_int()
+    if n < 32 || n == 127 {
+      return true
+    }
+  }
+  false
+}
+
+///|
 /// Which matrix rows a concrete `GenericImage` actually uses — only
 /// non-default settings are checked, so a bare image never trips a
 /// `Rejected` cell.
@@ -290,6 +340,18 @@ fn settings_in_use(image : GenericImage) -> Array[Setting] {
   }
   if image.extra_hosts.length() > 0 {
     used.push(ExtraHosts)
+  }
+  if image.ssh {
+    used.push(Ssh)
+  }
+  if image.masked_paths is Some(_) {
+    used.push(MaskedPaths)
+  }
+  if image.readonly_paths is Some(_) {
+    used.push(ReadonlyPaths)
+  }
+  if image.kernel is Some(_) {
+    used.push(Kernel)
   }
   if image.mounts.length() > 0 {
     used.push(Mounts)
@@ -419,12 +481,14 @@ fn validate_image_request(image : GenericImage) -> Unit raise {
     seen_container.push(port)
   }
   for (key, _) in image.env_vars {
-    guard key != "" && !key.contains("=") else {
+    guard key != "" && !key.contains("=") && !contains_control(key) else {
       fail("invalid environment key")
     }
   }
   for (key, _) in image.labels {
-    guard key != "" && !key.contains("=") else { fail("invalid label key") }
+    guard key != "" && !key.contains("=") && !contains_control(key) else {
+      fail("invalid label key")
+    }
   }
   if image.network is Some(name) {
     guard name != "" &&

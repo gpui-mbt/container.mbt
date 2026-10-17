@@ -1,0 +1,10 @@
+[xpc] starting
+[xpc] started container-mbt-xpc-1792238113081
+[xpc] exec
+[xpc] bind read
+[xpc] ro write
+[xpc] tmpfs
+[xpc] logs
+[xpc] stop
+[xpc] rm
+Apple XPC lifecycle E2E PASS (host_port=56069 fds=6->7)

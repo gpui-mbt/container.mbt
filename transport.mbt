@@ -35,6 +35,11 @@ const ERRNO_EACCES : Int32 = 13
 const ERRNO_EAGAIN : Int32 = 11
 
 ///|
+/// macOS uses a different errno for EAGAIN/EWOULDBLOCK (35). The
+/// transport is native-only and must classify both platforms.
+const ERRNO_EAGAIN_MACOS : Int32 = 35
+
+///|
 const ERRNO_ENOTDIR : Int32 = 20
 
 ///|
@@ -47,7 +52,28 @@ const ERRNO_ENAMETOOLONG : Int32 = 36
 const ERRNO_ETIMEDOUT : Int32 = 110
 
 ///|
+/// macOS ETIMEDOUT.
+const ERRNO_ETIMEDOUT_MACOS : Int32 = 60
+
+///|
 const ERRNO_ECONNREFUSED : Int32 = 111
+
+///|
+/// macOS ECONNREFUSED.
+const ERRNO_ECONNREFUSED_MACOS : Int32 = 61
+
+///|
+/// ENOTSOCK — connecting to a regular file/directory. Linux returns 88,
+/// macOS 38; both mean "not a listening socket" for classification.
+const ERRNO_ENOTSOCK : Int32 = 88
+
+///|
+const ERRNO_ENOTSOCK_MACOS : Int32 = 38
+
+///|
+fn is_eagain(errno : Int32) -> Bool {
+  errno == ERRNO_EAGAIN || errno == ERRNO_EAGAIN_MACOS
+}
 
 ///|
 /// Why a Unix-socket connection could not be established. The error
@@ -108,8 +134,9 @@ fn connect_error_of(errno : Int32, path : String) -> SocketConnectError {
   match errno {
     ERRNO_EPERM | ERRNO_EACCES => PermissionDenied(path)
     ERRNO_ENOENT | ERRNO_ENOTDIR => SocketMissing(path)
-    ERRNO_ECONNREFUSED => Refused(path)
-    ERRNO_ETIMEDOUT => Timeout(path)
+    ERRNO_ECONNREFUSED | ERRNO_ECONNREFUSED_MACOS => Refused(path)
+    ERRNO_ENOTSOCK | ERRNO_ENOTSOCK_MACOS => Refused(path)
+    ERRNO_ETIMEDOUT | ERRNO_ETIMEDOUT_MACOS => Timeout(path)
     n => ConnectFailed(n, path)
   }
 }
@@ -251,7 +278,7 @@ pub fn unix_listen(path : String, backlog~ : Int32 = 16) -> Int32 raise {
 pub fn unix_accept(listen_fd : Int32) -> Int32? raise {
   let fd = ffi_unix_accept(listen_fd)
   if fd < 0 {
-    if -fd == ERRNO_EAGAIN {
+    if is_eagain(-fd) {
       None
     } else {
       raise SocketConnectError::ConnectFailed(-fd, "<accept>")
@@ -319,8 +346,9 @@ pub fn try_owner_lock(path : String) -> Int32? raise {
     return Some(fd)
   }
   let errno = -fd
-  // EWOULDBLOCK == EAGAIN (11) on Linux: another process holds the lock.
-  if errno == 11 {
+  // EWOULDBLOCK == EAGAIN (11 on Linux, 35 on macOS): another process
+  // holds the lock.
+  if is_eagain(errno) {
     return None
   }
   fail("flock(\{path}) failed: errno \{errno}")

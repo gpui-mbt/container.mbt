@@ -2,13 +2,13 @@
 
 MoonBit-native port of [shiguredo/container-rs](https://github.com/shiguredo/container-rs). The original library exposes a testcontainers-like interface and uses **Apple Container XPC on macOS** and **Docker Engine API on Linux**.
 
-**Status: initial, incomplete port.** The current code offers native MoonBit image configuration and, on Linux, a **direct Docker Engine API adapter** (HTTP over the Unix socket — no `docker` CLI process) covering pull/create/start/inspect/stop/rm/wait/exec/logs, pre-start `with_copy_to` archive upload, dynamic port resolution, bridge IP inspection, and static registry auth. The `docker`/`container` CLI adapters remain available through the explicit `start_cli` selection only; `start` never falls back to them. The original XPC client (Apple Silicon), Drop/watchdog cleanup, and full testcontainers parity are not yet implemented. Linux Docker runtime integration is tested in CI. The Apple Container path has not been tested on an Apple Silicon host.
+**Status: M0/M1/M2 runtime paths implemented.** The library offers native MoonBit image configuration, a **direct Docker Engine API adapter** on Linux (HTTP over the Unix socket — no `docker` CLI process), and a **native Apple Container XPC adapter** on Apple Silicon (pull/create/start/exec/logs/stop/rm, dynamic ports, bridge/gateway, bind/tmpfs/volume mounts, post-start copy, masked/readonly paths, SSH and custom kernel). The `docker`/`container` CLI adapters remain available through the explicit `start_cli` selection only; `start` never falls back to them. Linux Docker integration is tested in CI; the XPC path passed a physical Apple Silicon E2E on 2026-10-17 on Apple Container 1.5.0. Full testcontainers parity is not claimed.
 
 ## Requirements
 
 - MoonBit with native backend, `moonbitlang/async` 0.22.4.
 - Linux with a running Docker-compatible engine (Unix socket at `/var/run/docker.sock` by default; explicit `DockerClient::new(socket_path~)` selects another socket — no implicit discovery). Rootless and Podman compatibility is a measured-boundary record in [docs/ENGINE_COMPATIBILITY.md](docs/ENGINE_COMPATIBILITY.md), not a support claim. The `docker` CLI is only needed for the explicit `start_cli` adapter.
-- macOS 26 on Apple Silicon with Apple `container` installed and `container system start` completed.
+- macOS 26 on Apple Silicon with Apple `container` 1.5.0+ installed and `container system start` completed.
 - No Node.js, Python, Rust, or Docker Desktop dependency in the MoonBit library.
 
 ## Quickstart
@@ -28,11 +28,13 @@ async fn main {
 }
 ```
 
-Apple Container on macOS 26 (Apple Silicon) — **unverified** until the M2 XPC path lands; the CLI adapter exists but covers a subset:
+Apple Container on macOS 26 (Apple Silicon) — native XPC, no `container` CLI process:
 
 ```moonbit
-let container = image.start_cli(@container.AppleContainer)
+let container = image.start(@container.AppleContainer)
 ```
+
+The explicit CLI fallback remains `image.start_cli(@container.AppleContainer)` for comparison only.
 
 Supported waits: `nothing`, `millis`, `millis_in_env_var`, `message_on_stdout`/`stderr`/`either`, `http`, `healthcheck`, `exit_code` (latter four on the direct Docker path; CLI adapters reject them preflight). Container options include `with_name`/`with_tag` overrides, mounts (`bind`/`volume`/`tmpfs` with size/mode), `with_hostname`/`with_host_addr`/`with_host_gateway`, `with_privileged`/`with_cap_add`/`with_cap_drop`/`with_shm_size`/`with_init`, `with_healthcheck`, and `with_copy_to` for pre-start file injection.
 
@@ -46,7 +48,7 @@ See [Porting status and roadmap](docs/PORTING.md) for exact differences. No clai
 |---|---|---|---|---|
 | Linux | Docker Engine (Unix socket) | API 1.44+ (Docker 25+) | PASS (native tests + CI smoke) | direct adapter; rootless/Podman boundary in [ENGINE_COMPATIBILITY.md](docs/ENGINE_COMPATIBILITY.md) |
 | Linux | `docker` CLI | Docker 25+ | PASS (native tests; CI smoke planned) | explicit `start_cli` only |
-| macOS 26 | Apple `container` | container 1.2.0 | 未実行 (physical Mac required) | CLI adapter subset; XPC adapter is M2 (issues 0023–0032) |
+| macOS 26 | Apple `container` | 1.5.0 tested | PASS (native XPC E2E incl. copy-in, volume, masked/readonly, SSH, custom kernel) | no `container` CLI in the XPC path — see [APPLE_E2E.md](docs/APPLE_E2E.md) |
 
 Incompatibilities to know: explicit `rm()` is required outside `with_container`; the public API is `async` only (no sync facade — see docs/PORTING.md); native backend only (`supported_targets = "native"`).
 
@@ -59,7 +61,15 @@ moon test --target native
 moon build --target native
 ```
 
-The unit tests are deterministic argument/API conformance tests. The Linux GitHub Actions job additionally runs a Docker daemon-backed smoke exercise in `smoke/` using the real Alpine image, including the readiness-failure cleanup path. macOS Apple Silicon real-runtime E2E is pending; see [Apple Container manual acceptance](docs/APPLE_E2E.md) and `smoke_apple/`. Do not merge without green CI, an independent approve-equivalent review and platform acceptance.
+On macOS, run the XPC-only smoke with a `PATH` that cannot resolve `container`:
+
+```sh
+moon build --target native
+env -i HOME="$HOME" PATH=/usr/bin:/bin \
+  _build/native/debug/build/smoke_xpc/smoke_xpc.exe
+```
+
+The unit tests are deterministic argument/API conformance tests plus live XPC handshake tests on macOS. CI has separate `native` and `docker-e2e` jobs; the latter runs the Docker daemon smoke and the direct-API E2E with artifacts. Apple Silicon E2E (`smoke_apple/`, `smoke_xpc/`) is recorded in [Apple Container acceptance](docs/APPLE_E2E.md), not in a GitHub-hosted macOS job. Do not merge without green CI, an independent approve-equivalent review and platform acceptance.
 
 ## Provenance and license
 

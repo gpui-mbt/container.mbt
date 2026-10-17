@@ -65,8 +65,8 @@ test "ownership label is attached to every run" {
 ///|
 /// 0001: the user-name precheck must distinguish present from absent.
 async test "name preflight classifies inspect results" {
-  assert_true(name_in_use_via("/bin/true", "taken"))
-  assert_true(!name_in_use_via("/bin/false", "free-name"))
+  assert_true(name_in_use_via(Docker, "/usr/bin/true", "taken"))
+  assert_true(!name_in_use_via(Docker, "/usr/bin/false", "free-name"))
 }
 
 ///|
@@ -79,7 +79,7 @@ async test "cleanup never removes a container lacking the ownership label" {
     user_named: true,
     owner_id: "p1-t0000000000000001",
   }
-  let note = collect_attempt("/bin/true", Docker, attempt, 800)
+  let note = collect_attempt("/usr/bin/true", Docker, attempt, 800)
   assert_true(note.contains("left untouched"))
 }
 
@@ -93,7 +93,7 @@ async test "cleanup reports an absent container without spawning removal" {
     user_named: false,
     owner_id: "p1-t0000000000000001",
   }
-  let note = collect_attempt("/bin/false", Docker, attempt, 700)
+  let note = collect_attempt("/usr/bin/false", Docker, attempt, 700)
   assert_true(note.contains("no owned container"))
 }
 
@@ -150,7 +150,7 @@ async test "cleanup budget is independent of any expired startup deadline" {
     owner_id: "p1-t0000000000000001",
   }
   let start = @async.now()
-  let note = collect_attempt("/bin/true", Docker, attempt, 300)
+  let note = collect_attempt("/usr/bin/true", Docker, attempt, 300)
   assert_true(@async.now() - start < 3000L)
   assert_true(note.contains("left untouched"))
 }

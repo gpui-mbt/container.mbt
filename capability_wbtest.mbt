@@ -192,6 +192,18 @@ test "capability matrix covers every adapter and setting" {
     Platform,
     ReadonlyRootfs,
     StartupTimeout,
+    CopyTo,
+    TmpfsOptions,
+    Hostname,
+    ExtraHosts,
+    Privileged,
+    Capabilities,
+    ShmSize,
+    Init,
+    Ssh,
+    MaskedPaths,
+    ReadonlyPaths,
+    Kernel,
   ]
   for adapter in adapters {
     for setting in settings {
@@ -205,7 +217,12 @@ test "capability matrix covers every adapter and setting" {
   assert_true(capability(CliDocker, DynamicPort) is Supported)
   assert_true(capability(DirectDocker, DynamicPort) is Supported)
   assert_true(capability(DirectDocker, Mounts) is Supported)
-  assert_true(capability(DirectXpc, Command) is NotYetImplemented(_))
+  assert_true(capability(DirectXpc, Command) is Supported)
+  assert_true(capability(DirectXpc, HealthcheckWait) is Rejected(_))
+  assert_true(capability(DirectXpc, ExtraHosts) is Rejected(_))
+  assert_true(capability(DirectXpc, Ssh) is Supported)
+  assert_true(capability(DirectDocker, Ssh) is Rejected(_))
+  assert_true(capability(CliApple, Ssh) is Rejected(_))
   assert_true(capability(CliDocker, HealthcheckWait) is NotYetImplemented(_))
   assert_true(capability(CliApple, ExitWait) is NotYetImplemented(_))
 }
@@ -234,12 +251,12 @@ async test "matrix rejection precedes any socket traffic" {
   } noraise {
     _ => fail("expected failure")
   }
-  // start(AppleContainer) selects DirectXpc — every setting NYI, and
-  // even a bare image fails at the adapter dispatch, not the CLI.
-  let bare = GenericImage::new("a", "1")
+  // start(AppleContainer) selects DirectXpc; healthchecks are rejected
+  // by the matrix before any pull/create side effect.
+  let bare = GenericImage::new("a", "1").with_wait_for(WaitFor::healthcheck())
   try bare.start(AppleContainer) catch {
-    Failure::Failure(msg) => assert_true(msg.contains("XPC"))
-    err => fail("expected XPC NYI error, got \{err}")
+    Failure::Failure(msg) => assert_true(msg.contains("healthcheck"))
+    err => fail("expected XPC matrix rejection, got \{err}")
   } noraise {
     _ => fail("expected failure")
   }

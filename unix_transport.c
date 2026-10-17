@@ -2,7 +2,6 @@
 // All functions return a non-negative file descriptor / 0 on success
 // and a negative errno value on failure. The MoonBit side classifies
 // the errno into typed errors.
-#define _GNU_SOURCE /* accept4, SOCK_CLOEXEC, SOCK_NONBLOCK */
 #include <errno.h>
 #include <poll.h>
 #include <stdint.h>
@@ -23,13 +22,25 @@ static int32_t fail_errno(int fd, int err) {
   return -err;
 }
 
+// Apply FD_CLOEXEC + O_NONBLOCK without the Linux-only SOCK_CLOEXEC /
+// SOCK_NONBLOCK socket(2) flags, so the same stub builds on macOS.
+// Returns 0 on success, -1 with errno set on failure.
+static int set_cloexec_nonblock(int fd) {
+  if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) return -1;
+  int flags = fcntl(fd, F_GETFL, 0);
+  if (flags < 0) return -1;
+  if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) return -1;
+  return 0;
+}
+
 // Connect to `path` (NUL-terminated UTF-8, filesystem unix socket).
 // The socket is created nonblocking; if connect() reports EINPROGRESS
 // we poll for writability up to `timeout_ms` and then read SO_ERROR.
 MOONBIT_FFI_EXPORT
 int32_t moonbit_container_unix_connect(const char *path, int32_t timeout_ms) {
-  int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd < 0) return -errno;
+  if (set_cloexec_nonblock(fd) < 0) return fail_errno(fd, errno);
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
@@ -56,8 +67,9 @@ int32_t moonbit_container_unix_connect(const char *path, int32_t timeout_ms) {
 // Bind + listen a nonblocking unix socket at `path`. The caller owns the fd.
 MOONBIT_FFI_EXPORT
 int32_t moonbit_container_unix_listen(const char *path, int32_t backlog) {
-  int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd < 0) return -errno;
+  if (set_cloexec_nonblock(fd) < 0) return fail_errno(fd, errno);
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
@@ -76,9 +88,10 @@ MOONBIT_FFI_EXPORT
 int32_t moonbit_container_unix_accept(int32_t listen_fd) {
   int fd;
   do {
-    fd = accept4((int)listen_fd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
+    fd = accept((int)listen_fd, NULL, NULL);
   } while (fd < 0 && errno == EINTR);
   if (fd < 0) return -errno;
+  if (set_cloexec_nonblock(fd) < 0) return fail_errno(fd, errno);
   return fd;
 }
 
@@ -86,9 +99,20 @@ int32_t moonbit_container_unix_accept(int32_t listen_fd) {
 MOONBIT_FFI_EXPORT
 int64_t moonbit_container_unix_socketpair(void) {
   int sv[2];
-  if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0, sv) <
-      0)
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0)
     return -(int64_t)errno;
+  if (set_cloexec_nonblock(sv[0]) < 0) {
+    int err = errno;
+    close(sv[0]);
+    close(sv[1]);
+    return -(int64_t)err;
+  }
+  if (set_cloexec_nonblock(sv[1]) < 0) {
+    int err = errno;
+    close(sv[0]);
+    close(sv[1]);
+    return -(int64_t)err;
+  }
   return ((int64_t)(uint32_t)sv[0] << 32) | (int64_t)(uint32_t)sv[1];
 }
 
@@ -143,4 +167,13 @@ int32_t moonbit_container_flock_try(const char *path) {
     return -saved;
   }
   return fd;
+}
+
+// Set O_NONBLOCK on an existing fd (XPC log fds are blocking by default).
+MOONBIT_FFI_EXPORT
+int32_t moonbit_container_set_nonblock(int32_t fd) {
+  int flags = fcntl((int)fd, F_GETFL, 0);
+  if (flags < 0) return -errno;
+  if (fcntl((int)fd, F_SETFL, flags | O_NONBLOCK) < 0) return -errno;
+  return 0;
 }

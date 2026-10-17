@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   native:
+    name: native compile and tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -23,15 +24,27 @@ jobs:
         run: moon test --target native
       - name: Build native library
         run: moon build --target native
-      - name: Linux Docker lifecycle integration
+      - name: Check Mooncakes package
+        run: moon package --list
+
+  docker-e2e:
+    name: Linux Docker daemon E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hustcer/setup-moonbit@v1
+      - name: Install dependencies
+        run: moon update
+      - name: Prepare Docker daemon
         run: |
           docker info
           docker pull alpine:3.20
-          moon run smoke --target native
+      - name: Linux Docker lifecycle integration
+        run: moon run smoke --target native
       - name: Linux direct-API E2E (no docker CLI on PATH)
         run: |
           set -e
-          docker pull alpine:3.20
           docker run -d --name container-mbt-e2e-foreign alpine:3.20 tail -f /dev/null
           docker ps -a | tee /tmp/ps-before.txt
           moon build --target native
@@ -55,15 +68,13 @@ jobs:
           fi
           docker inspect container-mbt-e2e-foreign >/dev/null
           docker rm -f container-mbt-e2e-foreign
-      - name: Upload direct-API E2E evidence
+      - name: Upload Docker E2E evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: direct-api-e2e
+          name: docker-e2e-${{ github.sha }}-${{ github.run_id }}
           path: |
             /tmp/e2e-run.log
             /tmp/ps-before.txt
             /tmp/ps-after.txt
           if-no-files-found: ignore
-      - name: Check Mooncakes package
-        run: moon package --list

@@ -1,0 +1,12 @@
+# Apple Container XPC evidence (2026-10-17)
+
+arm64
+ProductName:		macOS
+ProductVersion:		26.5.2
+BuildVersion:		25F84
+COMPONENT            VERSION                                                               BUILD    COMMIT
+container            0.12.3                                                                release  f9899013fd43dd058fdf89709eed0b0861bfd931
+container-apiserver  container-apiserver version 0.12.3 (build: release, commit: f989901)  release  f9899013fd43dd058fdf89709eed0b0861bfd931
+
+## Before
+ID  IMAGE  OS  ARCH  STATE  ADDR  CPUS  MEMORY  STARTED

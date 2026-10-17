@@ -15,6 +15,21 @@ pub struct LogFrame {
 }
 
 ///|
+pub fn LogFrame::stream(self : LogFrame) -> String {
+  self.stream
+}
+
+///|
+pub fn LogFrame::data(self : LogFrame) -> Bytes {
+  self.data
+}
+
+///|
+pub fn LogFrame::truncated(self : LogFrame) -> Bool {
+  self.truncated
+}
+
+///|
 /// Per-stream line splitter (upstream `logs/line.rs`): split on `\n`,
 /// strip a trailing `\r`, flush the pending tail on `finish`. A line
 /// longer than `max` emits one `truncated` frame holding its first
@@ -180,8 +195,10 @@ pub struct LogSubscription {
   priv session : DockerLogSession
   priv queue : FrameQueue
   priv client : DockerClient?
+  priv xpc : XpcContainer?
   priv consume : (LogFrame) -> Unit raise
   priv mut ended : Bool
+  priv mut stop_requested : Bool
   /// Consumer-callback failure that terminated delivery — `None` when
   /// only the pump ended (check `session.error()` via `error()`).
   priv mut failure : Error?
@@ -235,7 +252,8 @@ pub fn Container::subscribe_logs(
   consume : (LogFrame) -> Unit raise,
   buffer_limit~ : Int64 = 8388608L,
 ) -> LogSubscription raise {
-  guard self.client is Some(_) else {
+  let xpc = xpc_for(self.id)
+  guard self.client is Some(_) || xpc is Some(_) else {
     fail("log subscription is not implemented by the CLI adapters")
   }
   guard !self.removed else { fail("container already removed") }
@@ -246,8 +264,10 @@ pub fn Container::subscribe_logs(
     ),
     queue: FrameQueue::new(buffer_limit),
     client: self.client,
+    xpc,
     consume,
     ended: false,
+    stop_requested: false,
     failure: None,
   }
   match active_log_subs.get(self.id) {
@@ -263,6 +283,69 @@ pub fn Container::subscribe_logs(
 /// or `stop()` lands. Spawn it inside the caller's group —
 /// `group.spawn_bg(() => sub.run())`.
 pub async fn LogSubscription::run(self : LogSubscription) -> Unit {
+  if self.xpc is Some(xpc) {
+    @async.with_task_group(group => {
+      let out_split = LineSplitter::new("stdout", LOG_LINE_MAX_BYTES, fn(f) {
+        self.queue.put(f)
+      })
+      let err_split = LineSplitter::new("stderr", LOG_LINE_MAX_BYTES, fn(f) {
+        self.queue.put(f)
+      })
+      group.spawn_bg(() => {
+        let mut out_seen = 0
+        let mut err_seen = 0
+        while !self.stop_requested {
+          let logs = try read_logs(xpc, 200, 30) catch {
+            e => {
+              self.failure = Some(e)
+              break
+            }
+          } noraise {
+            logs => logs
+          }
+          let out_text = logs.stdout()
+          if out_text.length() < out_seen {
+            out_seen = 0
+          }
+          if out_text.length() > out_seen {
+            out_split.feed(@utf8.encode(out_text[out_seen:].to_owned()))
+            out_seen = out_text.length()
+          }
+          let err_text = logs.stderr()
+          if err_text.length() < err_seen {
+            err_seen = 0
+          }
+          if err_text.length() > err_seen {
+            err_split.feed(@utf8.encode(err_text[err_seen:].to_owned()))
+            err_seen = err_text.length()
+          }
+          @async.sleep(100)
+        }
+        out_split.finish()
+        err_split.finish()
+        self.queue.close()
+      })
+      group.spawn_bg(() => {
+        while true {
+          match self.queue.get() {
+            Some(frame) =>
+              try (self.consume)(frame) catch {
+                e => {
+                  self.failure = Some(e)
+                  self.stop_requested = true
+                  break
+                }
+              } noraise {
+                _ => ()
+              }
+            None => break
+          }
+        }
+        self.ended = true
+      })
+    })
+    return
+  }
   guard self.client is Some(client) else {
     fail("log subscription is not implemented by the CLI adapters")
   }
@@ -315,6 +398,7 @@ pub async fn LogSubscription::run(self : LogSubscription) -> Unit {
 /// pump), close the queue once the pump flushes, and wait for the
 /// delivery task to finish. Bounded — returns even if tasks linger.
 pub async fn LogSubscription::stop(self : LogSubscription) -> Unit {
+  self.stop_requested = true
   self.session.stop()
   self.queue.close()
   let deadline = @async.now() + 5000L
@@ -330,6 +414,7 @@ async fn stop_log_delivery(id : String) -> Unit {
   match active_log_subs.get(id) {
     Some(subs) => {
       for sub in subs {
+        sub.stop_requested = true
         sub.session.stop()
         sub.queue.close()
       }

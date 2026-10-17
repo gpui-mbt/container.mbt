@@ -5,11 +5,12 @@
 /// none networking).
 pub struct ContainerNetworks {
   priv addrs : Map[String, String]
+  priv gateways : Map[String, String]
 }
 
 ///|
 pub fn ContainerNetworks::empty() -> ContainerNetworks {
-  { addrs: {}, }
+  { addrs: {}, gateways: {}, }
 }
 
 ///|
@@ -17,21 +18,73 @@ pub fn ContainerNetworks::empty() -> ContainerNetworks {
 /// `IPAddress` is missing or not a string record as unassigned ("").
 pub fn ContainerNetworks::parse(json : Json) -> ContainerNetworks {
   let addrs : Map[String, String] = Map([])
+  let gateways : Map[String, String] = Map([])
   match json {
     Object(m) =>
-      for name, entry in m {
+      for (name, entry) in m {
         match entry {
-          Object(e) =>
+          Object(e) => {
             match e.get("IPAddress") {
               Some(String(ip)) => addrs[name] = ip
               _ => addrs[name] = ""
             }
+            match e.get("Gateway") {
+              Some(String(gw)) => gateways[name] = gw
+              _ => gateways[name] = ""
+            }
+          }
           _ => addrs[name] = ""
         }
       }
     _ => ()
   }
-  { addrs, }
+  { addrs, gateways, }
+}
+
+///|
+/// Normalize an Apple Container network entry (`networks` array) whose
+/// address fields are CIDR strings (`192.168.64.2/24`).
+pub fn ContainerNetworks::parse_xpc(item : Json) -> ContainerNetworks {
+  let addrs : Map[String, String] = Map([])
+  let gateways : Map[String, String] = Map([])
+  match item {
+    Object(map) =>
+      match map.get("networks") {
+        Some(Array(items)) =>
+          for entry in items {
+            match entry {
+              Object(e) => {
+                let name = match e.get("network") {
+                  Some(String(s)) => s
+                  _ => "default"
+                }
+                let addr = match e.get("ipv4Address") {
+                  Some(String(s)) => strip_cidr(s)
+                  _ => ""
+                }
+                let gateway = match e.get("ipv4Gateway") {
+                  Some(String(s)) => strip_cidr(s)
+                  _ => ""
+                }
+                addrs[name] = addr
+                gateways[name] = gateway
+              }
+              _ => ()
+            }
+          }
+        _ => ()
+      }
+    _ => ()
+  }
+  { addrs, gateways, }
+}
+
+///|
+fn strip_cidr(value : String) -> String {
+  match value.find("/") {
+    Some(index) => value[:index].to_owned()
+    None => value
+  }
 }
 
 ///|
@@ -96,6 +149,32 @@ pub fn ContainerNetworks::bridge_ip(
   guard is_ip_literal(ip) else {
     fail(
       "container \{container_id} network \{name}: \{ip} is not a valid IP literal",
+    )
+  }
+  ip
+}
+
+///|
+/// The container's gateway on the same first-network rule as
+/// `bridge_ip`. Used by the XPC path to resolve Docker's
+/// `host-gateway` equivalent.
+pub fn ContainerNetworks::gateway_ip(
+  self : ContainerNetworks,
+  container_id~ : String,
+) -> String raise {
+  guard self.gateways.length() > 0 else {
+    fail("container \{container_id} is not connected to any network")
+  }
+  let names = self.gateways.keys().to_array()
+  names.sort_by(fn(a, b) { String::lexical_compare(a, b) })
+  let name = names[0]
+  let ip = self.gateways[name]
+  guard ip != "" && !is_unspecified_literal(ip) else {
+    fail("container \{container_id} network \{name} has no gateway assigned")
+  }
+  guard is_ip_literal(ip) else {
+    fail(
+      "container \{container_id} network \{name}: \{ip} is not a valid gateway literal",
     )
   }
   ip

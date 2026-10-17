@@ -15,5 +15,10 @@ import {
 supported_targets = "+native"
 
 options(
-  "native-stub": [ "unix_transport.c" ],
+  "native-stub": [ "unix_transport.c", "xpc_stub.c" ],
+  link: {
+    "native": {
+      "stub-cc": "script/cc_stub.sh",
+    },
+  },
 )

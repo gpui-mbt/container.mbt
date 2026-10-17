@@ -236,6 +236,10 @@ fn GenericImage::snapshot(self : GenericImage) -> GenericImage {
     platform: self.platform,
     readonly_rootfs: self.readonly_rootfs,
     copy_to: self.copy_to.copy(),
+    ssh: self.ssh,
+    masked_paths: self.masked_paths,
+    readonly_paths: self.readonly_paths,
+    kernel: self.kernel,
   }
 }
 
@@ -273,8 +277,13 @@ pub fn WaitFor::millis(milliseconds : Int32) -> WaitFor {
 }
 
 ///|
-pub fn WaitFor::seconds(seconds : Int32) -> WaitFor {
-  Millis(seconds * 1000)
+pub fn WaitFor::seconds(seconds : Int32) -> WaitFor raise {
+  guard seconds >= 0 else { fail("wait duration must not be negative") }
+  let ms = seconds.to_int64() * 1000L
+  guard ms <= 2147483647L else {
+    fail("wait duration overflows the millisecond timeout")
+  }
+  Millis(ms.to_int())
 }
 
 ///|
@@ -329,6 +338,10 @@ pub struct GenericImage {
   mut platform : String?
   mut readonly_rootfs : Bool
   copy_to : Array[CopyTarget]
+  mut ssh : Bool
+  mut masked_paths : Array[String]?
+  mut readonly_paths : Array[String]?
+  mut kernel : String?
 }
 
 ///|
@@ -362,6 +375,10 @@ pub fn GenericImage::new(name : String, tag : String) -> GenericImage raise {
     platform: None,
     readonly_rootfs: false,
     copy_to: [],
+    ssh: false,
+    masked_paths: None,
+    readonly_paths: None,
+    kernel: None,
   }
 }
 
@@ -730,4 +747,45 @@ fn valid_container_name(name : String) -> Bool {
     }
   }
   true
+}
+
+///|
+/// Enable SSH access for the container (Apple Container XPC only).
+pub fn GenericImage::with_ssh(self : GenericImage) -> GenericImage {
+  self.ssh = true
+  self
+}
+
+///|
+/// Replace the runtime's default masked paths. An empty array disables
+/// the default mask; `None` (never calling this) keeps the runtime
+/// default. Last call wins.
+pub fn GenericImage::with_masked_paths(
+  self : GenericImage,
+  paths : Array[String],
+) -> GenericImage {
+  self.masked_paths = Some(paths.copy())
+  self
+}
+
+///|
+/// Replace the runtime's default read-only paths. Empty array and
+/// never-called are distinct, matching upstream.
+pub fn GenericImage::with_readonly_paths(
+  self : GenericImage,
+  paths : Array[String],
+) -> GenericImage {
+  self.readonly_paths = Some(paths.copy())
+  self
+}
+
+///|
+/// Use a custom kernel file instead of the default kernel. The path is
+/// validated (absolute, UTF-8, regular file) before any pull/create.
+pub fn GenericImage::with_kernel(
+  self : GenericImage,
+  path : String,
+) -> GenericImage {
+  self.kernel = Some(path)
+  self
 }

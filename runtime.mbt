@@ -110,6 +110,15 @@ async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
   if self.resolved_ports is Some(p) {
     return p
   }
+  if xpc_for(self.id) is Some(_) {
+    let item = match inspect_container(self.id) {
+      Some(item) => item
+      None => fail("container inspect failed: \{self.id} not found")
+    }
+    let ports = ResolvedPorts::parse_xpc(item)
+    self.resolved_ports = Some(ports)
+    return ports
+  }
   if self.client is Some(client) {
     let ports = client.inspect_container(self.id).ports
     self.resolved_ports = Some(ports)
@@ -136,6 +145,13 @@ async fn Container::inspect_ports(self : Container) -> ResolvedPorts {
 /// `docker inspect <id>` → `NetworkSettings.Networks`, normalized to
 /// name → `IPAddress` (0015).
 async fn Container::inspect_networks(self : Container) -> ContainerNetworks {
+  if xpc_for(self.id) is Some(_) {
+    let item = match inspect_container(self.id) {
+      Some(item) => item
+      None => fail("container inspect failed: \{self.id} not found")
+    }
+    return ContainerNetworks::parse_xpc(item)
+  }
   if self.client is Some(client) {
     return client.inspect_container(self.id).networks
   }
@@ -163,6 +179,13 @@ pub async fn Container::get_bridge_ip_address(self : Container) -> String {
 }
 
 ///|
+/// The container's gateway address on its first network. On XPC this is
+/// the Apple Container `ipv4Gateway`; on Docker it is `Gateway`.
+pub async fn Container::get_host_gateway_address(self : Container) -> String {
+  self.inspect_networks().gateway_ip(container_id=self.id)
+}
+
+///|
 /// Remaining milliseconds on the same clock used by MoonBit async timers.
 fn startup_remaining_ms(deadline : Int64) -> Int32 raise {
   let remaining = deadline - @async.now()
@@ -187,17 +210,63 @@ fn startup_command_timeout_ms(deadline : Int64, maximum : Int32) -> Int32 raise 
 }
 
 ///|
+/// Whether an inspect probe actually found an object. Docker's CLI exits
+/// non-zero for a missing container, while Apple's CLI exits 0 and
+/// prints `[]`; treating Apple's `[]` as "found" would make every run
+/// look like a name collision.
+fn inspect_found(output : @shell.Output) -> Bool {
+  if output.exit_code() != 0 {
+    return false
+  }
+  let text = output.stdout().trim()
+  if text == "" || text == "[]" {
+    return false
+  }
+  // Malformed inspect output is treated as present so the actual run
+  // reports the runtime's own error instead of silently proceeding.
+  let parsed = try @json.parse(text) catch {
+    _ => return true
+  } noraise {
+    j => j
+  }
+  match parsed {
+    Array(items) => items.length() > 0
+    _ => true
+  }
+}
+
+///|
 /// Best-effort check whether a container already holds `name`. An
 /// undetermined answer is treated as free so the actual run can report the
 /// runtime's own error.
-async fn name_in_use_via(executable : String, name : String) -> Bool {
+async fn name_in_use_via(
+  runtime : Runtime,
+  executable : String,
+  name : String,
+) -> Bool {
   let probe = @shell.Cmd(executable, build_inspect_args(name)).output(
     timeout_ms=5000,
     max_output_bytes=262144,
   ) catch {
     _ => return false
   }
-  probe.exit_code() == 0
+  if runtime is AppleContainer {
+    inspect_found(probe)
+  } else {
+    probe.exit_code() == 0
+  }
+}
+
+///|
+/// Whether an inspect probe found the object for the selected CLI
+/// runtime. Docker exits non-zero for a missing object; Apple exits 0
+/// and prints `[]`.
+fn inspect_hit(runtime : Runtime, output : @shell.Output) -> Bool {
+  if runtime is AppleContainer {
+    inspect_found(output)
+  } else {
+    output.exit_code() == 0
+  }
 }
 
 ///|
@@ -250,7 +319,7 @@ async fn collect_owned_container(
       _ => None
     }
     match probe {
-      Some(output) if output.exit_code() == 0 => {
+      Some(output) if inspect_hit(runtime, output) => {
         if !output.stdout().contains(attempt.owner_id()) {
           return "container \{attempt.name()} lacks the ownership label of this run; left untouched"
         }
@@ -293,14 +362,16 @@ pub async fn GenericImage::start(
   runtime : Runtime,
 ) -> Container {
   let adapter = adapter_for(runtime)
-  preflight(adapter, self)
   match adapter {
-    DirectDocker => self.start_with_client(DockerClient::new())
-    DirectXpc =>
-      fail(
-        "Apple Container XPC adapter is not yet implemented (issues 0023-0032); use start_cli to select the CLI explicitly",
-      )
-    CliDocker | CliApple => self.start_via_cli(runtime)
+    DirectXpc => self.start_with_xpc()
+    DirectDocker => {
+      preflight(adapter, self)
+      self.start_with_client(DockerClient::new())
+    }
+    CliDocker | CliApple => {
+      preflight(adapter, self)
+      self.start_via_cli(runtime)
+    }
   }
 }
 
@@ -444,7 +515,7 @@ async fn GenericImage::start_via_cli(
     deadline=Deadline::at(deadline),
   )
   if attempt.user_named() &&
-    name_in_use_via(runtime.executable(), attempt.name()) {
+    name_in_use_via(runtime, runtime.executable(), attempt.name()) {
     fail("container name is already in use: \{attempt.name()}")
   }
   // While the run is in flight no `Container` value exists yet; the flag
@@ -509,6 +580,9 @@ pub async fn Container::exec(
 ) -> ProcessOutput {
   guard !self.removed else { fail("container already removed") }
   guard command.length() > 0 else { fail("exec command must not be empty") }
+  if xpc_for(self.id) is Some(xpc) {
+    return exec_process(xpc, command, [])
+  }
   if self.client is Some(client) {
     let r = client.exec(self.id, cmd=command)
     return {
@@ -544,6 +618,9 @@ async fn Container::logs_with_timeout(
 ) -> ProcessOutput {
   guard !self.removed else { fail("container already removed") }
   guard timeout_ms > 0 else { fail("log timeout must be positive") }
+  if xpc_for(self.id) is Some(xpc) {
+    return read_logs(xpc, timeout_ms, 200)
+  }
   if self.client is Some(client) {
     let logs = client.logs(self.id, deadline=Deadline::after(timeout_ms))
     return {
@@ -589,6 +666,10 @@ pub async fn Container::stop_with_timeout(
   // Halt live log delivery before touching the runtime (0040,
   // upstream stop_log_delivery ordering).
   stop_log_delivery(self.id)
+  if xpc_for(self.id) is Some(_) {
+    stop_container(self.id, seconds)
+    return
+  }
   if self.client is Some(client) {
     return client.stop_container(
       self.id,
@@ -617,6 +698,20 @@ pub async fn Container::stop_with_timeout(
 /// record one).
 pub async fn Container::exit_code(self : Container) -> Int32? {
   let deadline = @async.now() + 5000L
+  if xpc_for(self.id) is Some(_) {
+    let result = try {
+      wait_process(self.id, self.id, 5000)
+    } catch {
+      XpcError::Timeout | XpcError::Remote(..) => return None
+      e => raise e
+    } noraise {
+      code => Some(code)
+    }
+    return match result {
+      Some(code) => Some(code.to_int())
+      None => None
+    }
+  }
   while true {
     if self.client is Some(client) {
       let inspect = try client.inspect_container(self.id) catch {
@@ -679,6 +774,12 @@ pub async fn Container::rm_within(self : Container, timeout_ms : Int32) -> Unit 
     return
   }
   stop_log_delivery(self.id)
+  if xpc_for(self.id) is Some(_) {
+    remove_container(self.id, true)
+    unregister_xpc(self.id)
+    self.removed = true
+    return
+  }
   if self.client is Some(client) {
     client.remove_container(
       self.id,

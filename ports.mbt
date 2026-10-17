@@ -226,3 +226,57 @@ pub fn ResolvedPorts::ipv6(
   }
   fail("container port \{key} is not exposed")
 }
+
+///|
+/// Parse the Apple Container `containerList` entry's
+/// `configuration.publishedPorts` array. `hostAddress` containing `:`
+/// is filed as IPv6, matching the Docker inspect split. hostPort=0 and
+/// containerPort=0 entries are never returned as reachable ports.
+pub fn ResolvedPorts::parse_xpc(item : Json) -> ResolvedPorts {
+  let out : ResolvedPorts = { exposed: {}, ipv4: {}, ipv6: {}, }
+  let entries = match item {
+    Object(map) =>
+      match map.get("configuration") {
+        Some(Object(config)) =>
+          match config.get("publishedPorts") {
+            Some(Array(items)) => items
+            _ => []
+          }
+        _ => []
+      }
+    _ => []
+  }
+  for entry in entries {
+    match entry {
+      Object(map) => {
+        let container_port = match map.get("containerPort") {
+          Some(Number(n, ..)) => n.to_int()
+          _ => continue
+        }
+        let host_port = match map.get("hostPort") {
+          Some(Number(n, ..)) => n.to_int()
+          _ => continue
+        }
+        let proto = match map.get("proto") {
+          Some(String(s)) => s
+          _ => continue
+        }
+        guard container_port >= 1 && container_port <= 65535 else { continue }
+        guard host_port >= 1 && host_port <= 65535 else { continue }
+        let host_address = match map.get("hostAddress") {
+          Some(String(s)) => s
+          _ => ""
+        }
+        let key = "\{container_port}/\{proto}"
+        out.exposed[key] = true
+        if host_address.contains(":") {
+          out.ipv6[key] = host_port
+        } else {
+          out.ipv4[key] = host_port
+        }
+      }
+      _ => ()
+    }
+  }
+  out
+}

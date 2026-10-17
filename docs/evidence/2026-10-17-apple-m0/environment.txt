@@ -1,0 +1,17 @@
+# Apple Container M0 evidence (2026-10-17)
+
+## Environment
+arm64
+ProductName:		macOS
+ProductVersion:		26.5.2
+BuildVersion:		25F84
+COMPONENT            VERSION                                                               BUILD    COMMIT
+container            0.12.3                                                                release  f9899013fd43dd058fdf89709eed0b0861bfd931
+container-apiserver  container-apiserver version 0.12.3 (build: release, commit: f989901)  release  f9899013fd43dd058fdf89709eed0b0861bfd931
+
+## Port 18080 before the run
+COMMAND     PID    USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+madobe-sh 33720 fu2hito   14u  IPv4 0x712461e11b35b8de      0t0  TCP *:18080 (LISTEN)
+
+## Before containers
+ID  IMAGE  OS  ARCH  STATE  ADDR  CPUS  MEMORY  STARTED

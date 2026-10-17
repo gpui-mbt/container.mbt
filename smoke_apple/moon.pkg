@@ -2,6 +2,9 @@ import {
   "gpui-mbt/container",
   "moonbitlang/async",
   "moonbitlang/async/shell",
+  "moonbitlang/async/socket",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
 }
 
 pkgtype(kind: "executable")
